@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import type { TemplateField } from "@/lib/proposals/types";
 
 const SANS = "'DM Sans',sans-serif";
@@ -6,6 +7,140 @@ const SANS = "'DM Sans',sans-serif";
 function safeJsonArray(val: string | undefined): string[] {
   if (!val) return [];
   try { return JSON.parse(val) as string[]; } catch { return []; }
+}
+
+/** Collapsible checklist / checklist-add component */
+function ChecklistField({ field, value, onChange }: { field: TemplateField; value: string; onChange: (key: string, value: string) => void }) {
+  const allChecked = safeJsonArray(value);
+  const presetItems = (field.checklistCategories || []).flatMap(c => c.items);
+  const customEntries = allChecked.filter(item => !presetItems.includes(item));
+  const [openCats, setOpenCats] = useState<Set<string>>(() => new Set());
+
+  const toggleCat = (cat: string) => {
+    setOpenCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat); else next.add(cat);
+      return next;
+    });
+  };
+
+  // Count checked items per category
+  const catCounts = (field.checklistCategories || []).map((cat) => ({
+    category: cat.category,
+    count: cat.items.filter((item) => allChecked.includes(item)).length,
+    total: cat.items.length,
+  }));
+
+  return (
+    <div style={{
+      background: "var(--bg2)", border: "1px solid var(--iBd)", borderRadius: 8,
+      padding: "4px 0", overflow: "hidden",
+    }}>
+      {/* Selected summary chips */}
+      {allChecked.length > 0 && (
+        <div style={{ padding: "6px 10px 2px", display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {allChecked.map((item) => (
+            <span key={item} style={{
+              fontSize: 10, padding: "2px 8px", borderRadius: 10,
+              background: "rgba(16,185,129,0.12)", color: "var(--accent, #10b981)",
+              fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4,
+            }}>
+              {item}
+              <button onClick={() => onChange(field.key, JSON.stringify(allChecked.filter(i => i !== item)))}
+                style={{ background: "none", border: "none", color: "var(--accent, #10b981)", cursor: "pointer", fontSize: 11, padding: 0, lineHeight: 1 }}
+              >{"\u00D7"}</button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Collapsible categories */}
+      {field.checklistCategories?.map((cat, ci) => {
+        const isOpen = openCats.has(cat.category);
+        const info = catCounts[ci];
+        return (
+          <div key={cat.category}>
+            <button
+              type="button"
+              onClick={() => toggleCat(cat.category)}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "7px 10px", background: "none", border: "none", borderTop: "1px solid var(--border)",
+                cursor: "pointer", textAlign: "left", color: "var(--text3)",
+              }}>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                {isOpen ? "\u25BC" : "\u25B6"} {cat.category}
+              </span>
+              {info.count > 0 && (
+                <span style={{ fontSize: 10, color: "var(--accent, #10b981)", fontWeight: 700 }}>
+                  {info.count}/{info.total}
+                </span>
+              )}
+            </button>
+            {isOpen && (
+              <div style={{ padding: "0 10px 6px" }}>
+                {cat.items.map((item) => {
+                  const isChecked = allChecked.includes(item);
+                  return (
+                    <label key={item} style={{
+                      display: "flex", alignItems: "flex-start", gap: 8, padding: "3px 0",
+                      cursor: "pointer", fontSize: 12, color: "var(--text)", lineHeight: 1.4,
+                    }}>
+                      <input type="checkbox" checked={isChecked}
+                        onChange={() => {
+                          const next = isChecked ? allChecked.filter(i => i !== item) : [...allChecked, item];
+                          onChange(field.key, JSON.stringify(next));
+                        }}
+                        style={{ marginTop: 2, flexShrink: 0, accentColor: "var(--accent, #10b981)" }}
+                      />
+                      <span>{item}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Custom entries section */}
+      {field.type === "checklist-add" && customEntries.length > 0 && (
+        <div style={{ borderTop: "1px solid var(--border)", padding: "6px 10px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
+            Custom
+          </div>
+          {customEntries.map((item) => (
+            <div key={item} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: 12, color: "var(--text)", lineHeight: 1.4 }}>
+              <span style={{ color: "var(--accent, #10b981)", fontSize: 14, flexShrink: 0 }}>{"\u2713"}</span>
+              <span style={{ flex: 1 }}>{item}</span>
+              <button onClick={() => onChange(field.key, JSON.stringify(allChecked.filter(i => i !== item)))}
+                style={{ background: "none", border: "none", color: "#f85149", cursor: "pointer", fontSize: 13, padding: "0 4px", flexShrink: 0, lineHeight: 1 }}
+                title="Remove">{"\u2715"}</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add custom button */}
+      {field.type === "checklist-add" && (
+        <div style={{ padding: "4px 10px 8px", borderTop: customEntries.length === 0 ? "1px solid var(--border)" : "none" }}>
+          <button onClick={() => {
+            const custom = prompt("Enter custom item:");
+            if (custom?.trim()) {
+              onChange(field.key, JSON.stringify([...allChecked, custom.trim()]));
+            }
+          }}
+            style={{
+              background: "var(--bg3)", border: "1px solid var(--border3)", borderRadius: 6,
+              color: "var(--text3)", cursor: "pointer", padding: "5px 12px", fontSize: 11,
+              fontWeight: 600, display: "flex", alignItems: "center", gap: 4,
+            }}>
+            + Add Custom
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface ProposalFormFieldProps {
@@ -99,82 +234,9 @@ export default function ProposalFormField({ field, value, onChange, animDelay }:
         );
       })()
 
-      : (field.type === "checklist" || field.type === "checklist-add") ? (() => {
-        const allChecked = safeJsonArray(value);
-        const presetItems = (field.checklistCategories || []).flatMap(c => c.items);
-        const customEntries = allChecked.filter(item => !presetItems.includes(item));
-        return (
-          <div style={{
-            background: "var(--bg2)", border: "1px solid var(--iBd)", borderRadius: 8,
-            padding: "8px 10px", maxHeight: 320, overflowY: "auto",
-          }}>
-            {field.checklistCategories?.map((cat) => (
-              <div key={cat.category} style={{ marginBottom: 10 }}>
-                <div style={{
-                  fontSize: 11, fontWeight: 700, color: "var(--text3)",
-                  textTransform: "uppercase", letterSpacing: "0.5px",
-                  padding: "4px 0", borderBottom: "1px solid var(--border)",
-                  marginBottom: 4,
-                }}>
-                  {cat.category}
-                </div>
-                {cat.items.map((item) => {
-                  const isChecked = allChecked.includes(item);
-                  return (
-                    <label key={item} style={{
-                      display: "flex", alignItems: "flex-start", gap: 8, padding: "3px 0",
-                      cursor: "pointer", fontSize: 12, color: "var(--text)", lineHeight: 1.4,
-                    }}>
-                      <input type="checkbox" checked={isChecked}
-                        onChange={() => {
-                          const next = isChecked ? allChecked.filter(i => i !== item) : [...allChecked, item];
-                          onChange(field.key, JSON.stringify(next));
-                        }}
-                        style={{ marginTop: 2, flexShrink: 0, accentColor: "var(--accent, #10b981)" }}
-                      />
-                      <span>{item}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            ))}
-            {field.type === "checklist-add" && customEntries.length > 0 && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{
-                  fontSize: 11, fontWeight: 700, color: "var(--text3)",
-                  textTransform: "uppercase", letterSpacing: "0.5px",
-                  padding: "4px 0", borderBottom: "1px solid var(--border)",
-                  marginBottom: 4,
-                }}>Custom</div>
-                {customEntries.map((item) => (
-                  <div key={item} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: 12, color: "var(--text)", lineHeight: 1.4 }}>
-                    <span style={{ color: "var(--accent, #10b981)", fontSize: 14, flexShrink: 0 }}>{"\u2713"}</span>
-                    <span style={{ flex: 1 }}>{item}</span>
-                    <button onClick={() => onChange(field.key, JSON.stringify(allChecked.filter(i => i !== item)))}
-                      style={{ background: "none", border: "none", color: "#f85149", cursor: "pointer", fontSize: 13, padding: "0 4px", flexShrink: 0, lineHeight: 1 }}
-                      title="Remove">{"\u2715"}</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {field.type === "checklist-add" && (
-              <button onClick={() => {
-                const custom = prompt("Enter custom item:");
-                if (custom?.trim()) {
-                  onChange(field.key, JSON.stringify([...allChecked, custom.trim()]));
-                }
-              }}
-                style={{
-                  background: "var(--bg3)", border: "1px solid var(--border3)", borderRadius: 6,
-                  color: "var(--text3)", cursor: "pointer", padding: "5px 12px", fontSize: 11,
-                  fontWeight: 600, display: "flex", alignItems: "center", gap: 4, marginTop: 6,
-                }}>
-                + Add Custom
-              </button>
-            )}
-          </div>
-        );
-      })()
+      : (field.type === "checklist" || field.type === "checklist-add") ? (
+        <ChecklistField field={field} value={value} onChange={onChange} />
+      )
 
       : (
         <input type={field.type === "number" ? "number" : "text"} value={value || ""}
