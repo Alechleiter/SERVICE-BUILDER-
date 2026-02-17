@@ -72,11 +72,8 @@ export const ITEM_PRESETS: CadPreset[] = [
 /* ── ISSUE presets (orange circles) ── */
 export const ISSUE_PRESETS: CadPreset[] = [
   { abbreviation: "A", label: "Active Infestation", color: ISSUE_COLOR, category: "issue" },
-  { abbreviation: "AF", label: "Improper Air Flow", color: ISSUE_COLOR, category: "issue" },
-  { abbreviation: "DR", label: "Dry Rot", color: ISSUE_COLOR, category: "issue" },
   { abbreviation: "EF", label: "Excessive Food Debris", color: ISSUE_COLOR, category: "issue" },
   { abbreviation: "EM", label: "Excessive Moisture", color: ISSUE_COLOR, category: "issue" },
-  { abbreviation: "FG", label: "Faulty Grade", color: ISSUE_COLOR, category: "issue" },
   { abbreviation: "IA", label: "Inaccessible Area", color: ISSUE_COLOR, category: "issue" },
   { abbreviation: "MS", label: "Miscellaneous", color: ISSUE_COLOR, category: "issue" },
   { abbreviation: "P", label: "Utility Penetration", color: ISSUE_COLOR, category: "issue" },
@@ -94,9 +91,11 @@ export const FINDING_PRESETS: CadPreset[] = [
   { abbreviation: "CS", label: "Bed Bug Cast Skin", color: "#E63946", category: "finding" },
   { abbreviation: "BD", label: "Bed Bug Droppings", color: "#E63946", category: "finding" },
   { abbreviation: "BN", label: "Bed Bug Encasement", color: "#E63946", category: "finding" },
-  { abbreviation: "GW", label: "Gateway", color: "#9CA3AF", category: "finding" },
+  { abbreviation: "RD", label: "Rat Droppings", color: "#E63946", category: "finding" },
+  { abbreviation: "MD", label: "Mice Droppings", color: "#E63946", category: "finding" },
+  { abbreviation: "DA", label: "Dead American Roach", color: "#E63946", category: "finding" },
+  { abbreviation: "DG", label: "Dead German Roach", color: "#E63946", category: "finding" },
   { abbreviation: "PM", label: "Pest Monitor", color: "#2A9D8F", category: "finding" },
-  { abbreviation: "RC", label: "Restroom Care", color: FINDING_COLOR, category: "finding" },
 ];
 
 /* ── Category color for treatment/equipment ── */
@@ -106,9 +105,7 @@ const TREATMENT_COLOR = "#8B5CF6";
 export const TREATMENT_PRESETS: CadPreset[] = [
   { abbreviation: "AC", label: "Air Curtain", color: "#6366F1", category: "treatment" },
   { abbreviation: "AS", label: "Scent Shield", color: "#6366F1", category: "treatment" },
-  { abbreviation: "AF", label: "AutoFresh AutoClean", color: TREATMENT_COLOR, category: "treatment" },
-  { abbreviation: "BS", label: "Bait Station", color: "#2A9D8F", category: "treatment" },
-  { abbreviation: "BX", label: "Bait Station-S", color: "#2A9D8F", category: "treatment" },
+  { abbreviation: "CB", label: "Conventional Bed Bug Service", color: "#E63946", category: "treatment" },
   { abbreviation: "BI", label: "Bird Control", color: "#F59E0B", category: "treatment" },
   { abbreviation: "DS", label: "Door Sweep", color: "#F59E0B", category: "treatment" },
   { abbreviation: "FB", label: "Fly Bait Station", color: "#2A9D8F", category: "treatment" },
@@ -124,8 +121,9 @@ export const TREATMENT_PRESETS: CadPreset[] = [
   { abbreviation: "RT", label: "Rat Snap Trap", color: "#E63946", category: "treatment" },
   { abbreviation: "RX", label: "Rat Snap Trap-S", color: "#E63946", category: "treatment" },
   { abbreviation: "SS", label: "Sanitizing Services", color: TREATMENT_COLOR, category: "treatment" },
-  { abbreviation: "TN", label: "Tin Cat", color: "#F59E0B", category: "treatment" },
-  { abbreviation: "TS", label: "Tin Cat-S", color: "#F59E0B", category: "treatment" },
+  { abbreviation: "HT", label: "Heat Service", color: "#E63946", category: "treatment" },
+  { abbreviation: "PB", label: "Proactive Bed Bug Service", color: "#E63946", category: "treatment" },
+  { abbreviation: "K9", label: "K9 Service", color: "#E63946", category: "treatment" },
   { abbreviation: "WT", label: "Wild Life Trap", color: "#F59E0B", category: "treatment" },
 ];
 
