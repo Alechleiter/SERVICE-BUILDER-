@@ -18,6 +18,15 @@ export default function NavBar() {
     router.push("/auth");
   };
 
+  /* ── Simple mobile check ── */
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    const check = () => setIsNarrow(window.innerWidth < 600);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
   /* ── Theme state ── */
   const [isDark, setIsDark] = useState(true);
   useEffect(() => {
@@ -52,8 +61,8 @@ export default function NavBar() {
           return (
             <Link key={item.href} href={item.href}
               style={{
-                display: "flex", alignItems: "center", gap: "6px",
-                padding: "6px 16px", borderRadius: "8px", fontSize: "12px",
+                display: "flex", alignItems: "center", gap: isNarrow ? "0px" : "6px",
+                padding: isNarrow ? "6px 10px" : "6px 16px", borderRadius: "8px", fontSize: "12px",
                 fontWeight: isActive ? 600 : 500,
                 letterSpacing: "-0.01em",
                 textDecoration: "none", transition: "all 0.2s ease",
@@ -61,8 +70,8 @@ export default function NavBar() {
                 color: isActive ? "var(--accent)" : "var(--text4)",
                 border: "none",
               }}>
-              <span style={{ fontSize: "13px" }}>{item.icon}</span>
-              {item.label}
+              <span style={{ fontSize: isNarrow ? "16px" : "13px" }}>{item.icon}</span>
+              {!isNarrow && item.label}
             </Link>
           );
         })}
@@ -89,15 +98,17 @@ export default function NavBar() {
 
       {/* Right: Auth indicator */}
       {isConfigured && !isLoading && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: isNarrow ? 4 : 8 }}>
           {user ? (
             <>
-              <span style={{
-                fontSize: 11, color: "var(--text4)",
-                maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>
-                {user.email}
-              </span>
+              {!isNarrow && (
+                <span style={{
+                  fontSize: 11, color: "var(--text4)",
+                  maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                  {user.email}
+                </span>
+              )}
               <button
                 onClick={handleSignOut}
                 style={{

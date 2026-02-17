@@ -328,7 +328,7 @@ export default function SavedProposalPage() {
             style={{
               background: "transparent", border: "none", color: "var(--text)",
               fontWeight: 700, fontSize: isMobile ? 12 : 14, outline: "none", fontFamily: SANS,
-              width: isMobile ? 120 : 200, minWidth: 0,
+              width: isMobile ? "auto" : 200, minWidth: 0, flex: isMobile ? 1 : undefined, maxWidth: isMobile ? 120 : undefined,
             }}
           />
         </div>
@@ -342,20 +342,22 @@ export default function SavedProposalPage() {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <select
-            value={selectedClientId}
-            onChange={(e) => setSelectedClientId(e.target.value)}
-            style={{
-              background: "var(--bg3)", border: "1px solid var(--border3)", borderRadius: 8,
-              color: "var(--text)", padding: "5px 10px", fontSize: 12, fontFamily: SANS,
-              cursor: "pointer", maxWidth: isMobile ? 100 : 160,
-            }}>
-            <option value="">— No Client —</option>
-            {clientsList.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          {!isMobile && (
+            <select
+              value={selectedClientId}
+              onChange={(e) => setSelectedClientId(e.target.value)}
+              style={{
+                background: "var(--bg3)", border: "1px solid var(--border3)", borderRadius: 8,
+                color: "var(--text)", padding: "5px 10px", fontSize: 12, fontFamily: SANS,
+                cursor: "pointer", maxWidth: 160,
+              }}>
+              <option value="">— No Client —</option>
+              {clientsList.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
           <button onClick={handleSave} disabled={saving} style={{
             background: saving ? "var(--bg3)" : "var(--gradientPrimary, linear-gradient(135deg,#10b981,#059669))",
             border: "none", borderRadius: 8, color: "#fff", cursor: saving ? "not-allowed" : "pointer",
@@ -491,7 +493,7 @@ export default function SavedProposalPage() {
             onClick={(e) => e.stopPropagation()}
             style={{
               background: "var(--bg2)", border: "1px solid var(--border2)",
-              borderRadius: 14, padding: "24px 28px", minWidth: 320,
+              borderRadius: 14, padding: isMobile ? "20px 16px" : "24px 28px", width: "90%", maxWidth: 360,
               boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
             }}>
             <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700 }}>Keyboard Shortcuts</h3>

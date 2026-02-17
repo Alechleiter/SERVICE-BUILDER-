@@ -307,7 +307,7 @@ export function buildProposalExportHTML(
     html += `<p style="text-align:center;font-size:12px;color:#555;font-style:italic;margin-bottom:20px;">The following photographs document conditions observed during the site inspection.</p>`;
 
     Object.entries(groups).forEach(([zone, group]) => {
-      html += `<h3 style="font-size:13px;font-weight:700;text-transform:uppercase;border-bottom:1px solid #ddd;padding-bottom:4px;margin:16px 0 10px;">${group.icon} ${zone} \u2014 ${group.photos.length} photo${group.photos.length !== 1 ? "s" : ""}</h3>`;
+      html += `<h3 style="font-size:13px;font-weight:700;text-transform:uppercase;border-bottom:1px solid #ddd;padding-bottom:4px;margin:16px 0 10px;page-break-after:avoid;">${group.icon} ${zone} \u2014 ${group.photos.length} photo${group.photos.length !== 1 ? "s" : ""}</h3>`;
 
       if (forWord) {
         // Word: use table grid for photos, 2 per row with fixed-size cells
@@ -316,11 +316,11 @@ export function buildProposalExportHTML(
         // Fixed column widths
         html += `<colgroup><col style="width:50%;" /><col style="width:50%;" /></colgroup>`;
         for (let i = 0; i < zonePhotos.length; i += 2) {
-          html += `<tr>`;
+          html += `<tr style="page-break-inside:avoid;">`;
           for (let j = i; j < Math.min(i + 2, zonePhotos.length); j++) {
             const p = zonePhotos[j];
-            html += `<td style="width:50%;vertical-align:top;padding:4px;">`;
-            html += `<table style="width:100%;border-collapse:collapse;border:1px solid #d0d0d0;" cellpadding="0" cellspacing="0">`;
+            html += `<td style="width:50%;vertical-align:top;padding:4px;page-break-inside:avoid;">`;
+            html += `<table style="width:100%;border-collapse:collapse;border:1px solid #d0d0d0;page-break-inside:avoid;" cellpadding="0" cellspacing="0">`;
             // Image cell with fixed height — Word respects width+height on img
             html += `<tr><td style="padding:0;text-align:center;background:#f9f9f9;height:220px;vertical-align:middle;">`;
             html += `<img src="${p.src}" width="310" height="210" style="width:310px;height:210px;object-fit:cover;display:block;margin:0 auto;" />`;

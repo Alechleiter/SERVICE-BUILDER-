@@ -786,7 +786,7 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
       {/* ── START SCREEN: Upload or Draw from Scratch ── */}
       {!mapData && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: 10, marginBottom: 8 }}>
             <div
               onClick={() => fileInputRef.current?.click()}
               onDragOver={(e) => { e.preventDefault(); (e.currentTarget as HTMLDivElement).style.borderColor = accentColor; }}
@@ -865,7 +865,7 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
               borderRadius: "10px 10px 0 0", padding: 10,
             }}>
               {/* Category tabs */}
-              <div style={{ display: "flex", gap: 3, marginBottom: 8 }}>
+              <div style={{ display: "flex", gap: 3, marginBottom: 8, flexWrap: "wrap" }}>
                 {CATEGORIES.map(cat => {
                   const meta = CATEGORY_META[cat];
                   const isActive = activeCategory === cat;
@@ -873,7 +873,7 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
                     <button key={cat}
                       onClick={() => { setActiveCategory(cat); setSelectedPreset(null); setCustomMode(false); }}
                       style={{
-                        flex: 1, padding: "6px 0", fontSize: 10, fontWeight: 700, borderRadius: 6, cursor: "pointer",
+                        flex: "1 1 auto", minWidth: 0, padding: "6px 6px", fontSize: 10, fontWeight: 700, borderRadius: 6, cursor: "pointer",
                         background: isActive ? meta.defaultColor : "var(--bg3)",
                         color: isActive ? "#fff" : "var(--text4)",
                         border: "none", textTransform: "uppercase", letterSpacing: "0.5px",
@@ -888,7 +888,7 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
               {/* Icon picker grid */}
               <div style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 90px), 1fr))",
                 gap: 3, maxHeight: 150, overflowY: "auto",
                 padding: 4, background: "var(--bg)", borderRadius: 8,
                 border: "1px solid var(--border)",
@@ -1018,7 +1018,7 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
                 {DRAWING_TOOLS.map(t => (
                   <button key={t.id} onClick={() => { setDrawTool(t.id); setTextInputPos(null); }}
                     style={{
-                      flex: "1 1 auto", minWidth: 50, padding: "6px 8px", fontSize: 10, fontWeight: 700,
+                      flex: "1 1 auto", minWidth: 0, padding: "6px 8px", fontSize: 10, fontWeight: 700,
                       borderRadius: 6, cursor: "pointer",
                       background: drawTool === t.id ? accentColor : "var(--bg3)",
                       color: drawTool === t.id ? "#fff" : "var(--text4)",
@@ -1207,7 +1207,7 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
                     background: "rgba(255,255,255,0.95)", border: `2px solid ${drawColor}`,
                     borderRadius: 4, color: drawColor, padding: "3px 6px", fontSize: 13,
                     fontWeight: 700, outline: "none", fontFamily: "Arial, sans-serif",
-                    minWidth: 100, boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                    minWidth: 60, maxWidth: "80%", boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
                   }}
                 />
               </div>
@@ -1294,7 +1294,7 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
                     <div style={{
                       position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)",
                       background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8,
-                      padding: "8px 10px", minWidth: 180, marginBottom: 6,
+                      padding: "8px 10px", minWidth: 140, maxWidth: "90vw", marginBottom: 6,
                       boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
                       pointerEvents: "auto", zIndex: 30,
                     }}>

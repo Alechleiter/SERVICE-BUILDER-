@@ -226,11 +226,11 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
   const cc = templateConfig.color;
 
   return (
-    <div id="proposal-preview" style={{ background: "#fff", color: "#1a1a2e", fontFamily: "'Georgia','Times New Roman',serif", padding: "48px 40px", lineHeight: 1.65 }}>
+    <div id="proposal-preview" style={{ background: "#fff", color: "#1a1a2e", fontFamily: "'Georgia','Times New Roman',serif", padding: "clamp(16px, 4vw, 48px) clamp(12px, 3vw, 40px)", lineHeight: 1.65 }}>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `3px solid ${cc}`, paddingBottom: 16, marginBottom: 28 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `3px solid ${cc}`, paddingBottom: 16, marginBottom: 28, gap: 8 }}>
         <div>
-          <div style={{ fontFamily: "'Arial Black','Helvetica',sans-serif", fontSize: 28, fontWeight: 900, color: cc, letterSpacing: "-0.5px", lineHeight: 1.2 }}>PEST CONTROL</div>
+          <div style={{ fontFamily: "'Arial Black','Helvetica',sans-serif", fontSize: "clamp(18px, 5vw, 28px)", fontWeight: 900, color: cc, letterSpacing: "-0.5px", lineHeight: 1.2 }}>PEST CONTROL</div>
           <div style={{ fontFamily: "'Arial',sans-serif", fontSize: 10, letterSpacing: "2px", color: "#666", marginTop: 2, textTransform: "uppercase" }}>{content.title.includes("Inspection") ? (isQuote ? "Inspection Report & Quote" : "Inspection Report") : "Service Proposal"}</div>
         </div>
         <div style={{ textAlign: "right", fontFamily: "'Arial',sans-serif", fontSize: 12, color: "#666" }}>
@@ -275,10 +275,10 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
                 <h3 style={{ margin: 0, fontFamily: "'Arial','Helvetica',sans-serif", fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px" }}>{zone}</h3>
                 <span style={{ fontFamily: "'Arial',sans-serif", fontSize: 11, color: "#999" }}>{"\u2014"} {group.photos.length} photo{group.photos.length !== 1 ? "s" : ""}</span>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: group.photos.length === 1 ? "1fr" : "1fr 1fr", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: group.photos.length === 1 ? "1fr" : "repeat(auto-fill, minmax(min(100%, 240px), 1fr))", gap: 16 }}>
                 {(group.photos as PhotoEntry[]).map((p) => (
-                  <div key={p.id} style={{ border: "1px solid #e0e0e0", borderRadius: 8, overflow: "hidden", background: "#fafafa" }}>
-                    <img src={p.src} alt="" style={{ width: "100%", height: group.photos.length === 1 ? 340 : 210, objectFit: "cover", display: "block" }} />
+                  <div key={p.id} style={{ border: "1px solid #e0e0e0", borderRadius: 8, overflow: "hidden", background: "#fafafa", pageBreakInside: "avoid" }}>
+                    <img src={p.src} alt="" style={{ width: "100%", height: "auto", aspectRatio: "16 / 10", objectFit: "cover", display: "block" }} />
                     <div style={{ padding: "10px 14px", fontFamily: "'Arial',sans-serif", fontSize: 12, lineHeight: 1.5, borderTop: "1px solid #eee" }}>
                       {p.concernType && (
                         <div style={{ color: cc, fontSize: 11, fontWeight: 700, marginBottom: 2 }}>Concern: {p.concernType}</div>
@@ -362,7 +362,8 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
           {mapData.markers.length > 0 && (() => {
             const legendGroups = groupMarkers(mapData.markers);
             return (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Arial',sans-serif", fontSize: 12 }}>
+              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Arial',sans-serif", fontSize: 12, minWidth: 400 }}>
                 <thead>
                   <tr style={{ borderBottom: "2px solid #ddd" }}>
                     <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 700, fontSize: 11, color: "#666", textTransform: "uppercase" }}>Icon</th>
@@ -386,6 +387,7 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
                   ))}
                 </tbody>
               </table>
+              </div>
             );
           })()}
         </div>
