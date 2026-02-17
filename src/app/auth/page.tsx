@@ -181,12 +181,17 @@ export default function AuthPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
                 style={{
                   position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
                   background: "none", border: "none", cursor: "pointer", padding: 4,
-                  fontSize: 16, color: "var(--text4)", lineHeight: 1,
+                  display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
-                {showPassword ? "\u{1F441}" : "\u{1F441}\u200D\u{1F5E8}"}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                  {!showPassword && <line x1="1" y1="1" x2="23" y2="23" />}
+                </svg>
               </button>
             </div>
           </div>
