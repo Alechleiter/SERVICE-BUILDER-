@@ -3,6 +3,7 @@ import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { MapData, MapMarker, MarkerCategory, DrawingTool, DrawingStroke } from "@/lib/proposals/types";
 import { ALL_PRESETS, CATEGORY_META, type CadPreset } from "@/lib/proposals/map-presets";
+import { isArchTool, drawArchSymbol } from "@/lib/proposals/map-draw-utils";
 import {
   getStrokeBBox,
   isPointNearStroke,
@@ -27,12 +28,17 @@ const GRID_BG = `
 
 const DRAW_COLORS = ["#1a1a2e", "#E63946", "#F97316", "#F59E0B", "#10B981", "#3B82F6"];
 const LINE_WIDTHS = [1, 2, 4];
-const DRAWING_TOOLS: { id: DrawingTool; label: string; icon: string }[] = [
-  { id: "pen", label: "Pen", icon: "\u270F\uFE0F" },
-  { id: "line", label: "Line", icon: "\u2571" },
-  { id: "rect", label: "Rect", icon: "\u25AD" },
-  { id: "circle", label: "Circle", icon: "\u25CB" },
-  { id: "text", label: "Text", icon: "T" },
+const DRAWING_TOOLS: { id: DrawingTool; label: string; icon: string; group: "draw" | "arch" }[] = [
+  { id: "pen", label: "Pen", icon: "\u270F\uFE0F", group: "draw" },
+  { id: "line", label: "Line", icon: "\u2571", group: "draw" },
+  { id: "rect", label: "Rect", icon: "\u25AD", group: "draw" },
+  { id: "circle", label: "Circle", icon: "\u25CB", group: "draw" },
+  { id: "text", label: "Text", icon: "T", group: "draw" },
+  { id: "door", label: "Door", icon: "\u{1F6AA}", group: "arch" },
+  { id: "double-door", label: "Dbl Door", icon: "\u{1F6AA}", group: "arch" },
+  { id: "sliding-door", label: "Sliding", icon: "\u2194\uFE0F", group: "arch" },
+  { id: "rollup-door", label: "Roll-Up", icon: "\u{1F3ED}", group: "arch" },
+  { id: "window", label: "Window", icon: "\u2B1C", group: "arch" },
 ];
 
 const SEL_COLOR = "#3B82F6"; // blue for selection UI
@@ -144,6 +150,13 @@ function drawStrokeOnCtx(ctx: CanvasRenderingContext2D, s: DrawingStroke, w: num
       const fs = (s.fontSize || 14) * (w / 800);
       ctx.font = `bold ${fs}px Arial, sans-serif`;
       ctx.fillText(s.text, px(s.points[0]), py(s.points[1]));
+      break;
+    }
+    default: {
+      // Architectural tools: door, double-door, sliding-door, rollup-door, window
+      if (isArchTool(s.tool) && s.points.length >= 4) {
+        drawArchSymbol(ctx, s.tool, px(s.points[0]), py(s.points[1]), px(s.points[2]), py(s.points[3]));
+      }
       break;
     }
   }
@@ -388,6 +401,12 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
         ctx.beginPath();
         ctx.arc(sx, sy, r, 0, Math.PI * 2);
         ctx.stroke();
+      } else if (isArchTool(drawTool)) {
+        // Preview: show dashed line for wall opening, full symbol on commit
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
       }
       ctx.setLineDash([]);
     }
@@ -416,6 +435,11 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
       const r = Math.sqrt((x - start.x) ** 2 + (y - start.y) ** 2);
       if (r > 0.5) {
         stroke = { id, tool: "circle", color: drawColor, lineWidth: drawWidth, points: [start.x, start.y, r] };
+      }
+    } else if (isArchTool(drawTool)) {
+      const dist = Math.sqrt((x - start.x) ** 2 + (y - start.y) ** 2);
+      if (dist > 0.5) {
+        stroke = { id, tool: drawTool, color: drawColor, lineWidth: drawWidth, points: [start.x, start.y, x, y] };
       }
     }
 
@@ -1014,8 +1038,12 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
               background: "var(--bg2)", border: "1px solid var(--border)",
               borderRadius: "10px 10px 0 0", padding: 10,
             }}>
+              {/* Draw tools group */}
+              <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
+                Draw
+              </div>
               <div style={{ display: "flex", gap: 3, marginBottom: 8, flexWrap: "wrap" }}>
-                {DRAWING_TOOLS.map(t => (
+                {DRAWING_TOOLS.filter(t => t.group === "draw").map(t => (
                   <button key={t.id} onClick={() => { setDrawTool(t.id); setTextInputPos(null); }}
                     style={{
                       flex: "1 1 auto", minWidth: 50, padding: "6px 8px", fontSize: 10, fontWeight: 700,
@@ -1023,6 +1051,31 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
                       background: drawTool === t.id ? accentColor : "var(--bg3)",
                       color: drawTool === t.id ? "#fff" : "var(--text4)",
                       border: "none", transition: "all 0.15s",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 3,
+                    }}>
+                    <span style={{ fontSize: 12 }}>{t.icon}</span> {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Architecture tools divider + group */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>
+                  Architecture
+                </span>
+                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+              </div>
+              <div style={{ display: "flex", gap: 3, marginBottom: 8, flexWrap: "wrap" }}>
+                {DRAWING_TOOLS.filter(t => t.group === "arch").map(t => (
+                  <button key={t.id} onClick={() => { setDrawTool(t.id); setTextInputPos(null); }}
+                    style={{
+                      flex: "1 1 auto", minWidth: 52, padding: "6px 8px", fontSize: 10, fontWeight: 700,
+                      borderRadius: 6, cursor: "pointer",
+                      background: drawTool === t.id ? accentColor : "var(--bg3)",
+                      color: drawTool === t.id ? "#fff" : "var(--text4)",
+                      border: drawTool === t.id ? "none" : "1px solid var(--border3)",
+                      transition: "all 0.15s",
                       display: "flex", alignItems: "center", justifyContent: "center", gap: 3,
                     }}>
                     <span style={{ fontSize: 12 }}>{t.icon}</span> {t.label}

@@ -83,7 +83,9 @@ export interface MapMarker {
   icon?: string;
 }
 
-export type DrawingTool = "pen" | "line" | "rect" | "circle" | "text";
+export type DrawingTool =
+  | "pen" | "line" | "rect" | "circle" | "text"
+  | "door" | "double-door" | "sliding-door" | "rollup-door" | "window";
 
 export interface DrawingStroke {
   id: number;
@@ -95,7 +97,8 @@ export interface DrawingStroke {
       line: [x1, y1, x2, y2]
       rect: [x, y, width, height]
       circle: [cx, cy, radius]
-      text: [x, y] */
+      text: [x, y]
+      door/double-door/sliding-door/rollup-door/window: [x1, y1, x2, y2] wall opening */
   points: number[];
   /** Only for text tool */
   text?: string;

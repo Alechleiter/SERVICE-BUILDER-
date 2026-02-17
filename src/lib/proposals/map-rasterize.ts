@@ -3,6 +3,7 @@
  * Used for Word export where absolute positioning and SVG don't work.
  */
 import type { MapData, MapMarker, DrawingStroke } from "./types";
+import { isArchTool, drawArchSymbol } from "./map-draw-utils";
 
 // ── Shape drawing helpers ──
 
@@ -140,6 +141,13 @@ function drawStroke(ctx: CanvasRenderingContext2D, s: DrawingStroke, cw: number,
       ctx.fillStyle = s.color;
       ctx.font = `600 ${fs}px Arial, sans-serif`;
       ctx.fillText(s.text, toX(s.points[0]), toY(s.points[1]));
+      break;
+    }
+    default: {
+      // Architectural tools: door, double-door, sliding-door, rollup-door, window
+      if (isArchTool(s.tool) && s.points.length >= 4) {
+        drawArchSymbol(ctx, s.tool, toX(s.points[0]), toY(s.points[1]), toX(s.points[2]), toY(s.points[3]));
+      }
       break;
     }
   }
