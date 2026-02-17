@@ -34,7 +34,22 @@ export async function middleware(request: NextRequest) {
   );
 
   // Refresh the auth session
-  await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Redirect unauthenticated users to /auth (except the auth page itself)
+  const isAuthPage = request.nextUrl.pathname === "/auth";
+  if (!user && !isAuthPage) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth";
+    return NextResponse.redirect(url);
+  }
+
+  // If already logged in and visiting /auth, redirect to home
+  if (user && isAuthPage) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
 
   return supabaseResponse;
 }

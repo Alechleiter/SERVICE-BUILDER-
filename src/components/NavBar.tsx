@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 
 const NAV_ITEMS = [
@@ -10,7 +10,13 @@ const NAV_ITEMS = [
 
 export default function NavBar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, isLoading, isConfigured, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/auth");
+  };
 
   /* ── Theme state ── */
   const [isDark, setIsDark] = useState(true);
@@ -93,7 +99,7 @@ export default function NavBar() {
                 {user.email}
               </span>
               <button
-                onClick={() => signOut()}
+                onClick={handleSignOut}
                 style={{
                   background: "var(--bg3, rgba(255,255,255,0.06))",
                   border: "1px solid var(--border3, rgba(255,255,255,0.08))",
