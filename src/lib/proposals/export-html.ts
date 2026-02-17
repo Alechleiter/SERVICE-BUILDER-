@@ -310,25 +310,33 @@ export function buildProposalExportHTML(
       html += `<h3 style="font-size:13px;font-weight:700;text-transform:uppercase;border-bottom:1px solid #ddd;padding-bottom:4px;margin:16px 0 10px;">${group.icon} ${zone} \u2014 ${group.photos.length} photo${group.photos.length !== 1 ? "s" : ""}</h3>`;
 
       if (forWord) {
-        // Word: use table grid for photos, 2 per row
+        // Word: use table grid for photos, 2 per row with fixed-size cells
         const zonePhotos = group.photos as PhotoEntry[];
-        html += `<table style="width:100%;border-collapse:collapse;" cellpadding="6" cellspacing="0">`;
+        html += `<table style="width:100%;border-collapse:collapse;table-layout:fixed;" cellpadding="0" cellspacing="0">`;
+        // Fixed column widths
+        html += `<colgroup><col style="width:50%;" /><col style="width:50%;" /></colgroup>`;
         for (let i = 0; i < zonePhotos.length; i += 2) {
           html += `<tr>`;
           for (let j = i; j < Math.min(i + 2, zonePhotos.length); j++) {
             const p = zonePhotos[j];
-            html += `<td style="width:50%;vertical-align:top;border:1px solid #e0e0e0;padding:6px;">`;
-            html += `<img src="${p.src}" width="320" style="width:100%;height:auto;display:block;" />`;
-            html += `<div style="padding:4px 0;font-size:11px;">`;
-            if (p.concernType) html += `<div style="color:${color};font-weight:700;font-size:10px;">Concern: ${p.concernType}</div>`;
-            if (p.locationFound) html += `<div style="color:#555;font-size:10px;">Location: ${p.locationFound}</div>`;
+            html += `<td style="width:50%;vertical-align:top;padding:4px;">`;
+            html += `<table style="width:100%;border-collapse:collapse;border:1px solid #d0d0d0;" cellpadding="0" cellspacing="0">`;
+            // Image cell with fixed height — Word respects width+height on img
+            html += `<tr><td style="padding:0;text-align:center;background:#f9f9f9;height:220px;vertical-align:middle;">`;
+            html += `<img src="${p.src}" width="310" height="210" style="width:310px;height:210px;object-fit:cover;display:block;margin:0 auto;" />`;
+            html += `</td></tr>`;
+            // Caption cell
+            html += `<tr><td style="padding:6px 8px;font-size:11px;border-top:1px solid #e0e0e0;font-family:Arial,sans-serif;">`;
+            if (p.concernType) html += `<div style="color:${color};font-weight:700;font-size:10px;margin-bottom:2px;">Concern: ${p.concernType}</div>`;
+            if (p.locationFound) html += `<div style="color:#555;font-size:10px;margin-bottom:2px;">Location: ${p.locationFound}</div>`;
             if (p.caption) html += `<div style="color:#333;">${p.caption}</div>`;
             if (!p.caption && !p.concernType && !p.locationFound) html += `<div style="color:#999;">No caption provided</div>`;
-            html += `</div></td>`;
+            html += `</td></tr></table>`;
+            html += `</td>`;
           }
           // If odd number, fill the empty cell
           if (i + 1 >= zonePhotos.length) {
-            html += `<td style="width:50%;"></td>`;
+            html += `<td style="width:50%;padding:4px;"></td>`;
           }
           html += `</tr>`;
         }
