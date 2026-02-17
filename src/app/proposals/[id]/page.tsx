@@ -20,6 +20,7 @@ import SectionPanel from "@/components/proposals/SectionPanel";
 import ExportMenu from "@/components/ExportMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useKeyboardShortcuts, SHORTCUT_LIST } from "@/hooks/useKeyboardShortcuts";
+import { useAutoSave, type AutoSaveData } from "@/hooks/useAutoSave";
 
 const SANS = "'DM Sans',sans-serif";
 const MONO = "'DM Mono',monospace";
@@ -52,6 +53,8 @@ export default function SavedProposalPage() {
   const [clientsList, setClientsList] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showRestore, setShowRestore] = useState(false);
+  const [restoredDraft, setRestoredDraft] = useState<AutoSaveData | null>(null);
 
   // Sync theme
   useEffect(() => {
@@ -59,43 +62,66 @@ export default function SavedProposalPage() {
     if (current) setIsDark(current === "dark");
   }, []);
 
-  // ── Prevent accidental back-navigation when editing ──
-  const hasUnsavedWork = selectedTemplate !== null && Object.keys(formData).length > 0;
+  // ── Auto-save to localStorage (keyed by proposal ID) ──
+  const autoSaveData = useMemo<AutoSaveData | null>(() => {
+    if (!selectedTemplate || Object.keys(formData).length === 0) return null;
+    return {
+      templateId: selectedTemplate,
+      formData,
+      inspectionDate,
+      selectedClientId: selectedClientId || undefined,
+      proposalName: proposalName || undefined,
+      photoCount: photos.length,
+      savedAt: Date.now(),
+    };
+  }, [selectedTemplate, formData, inspectionDate, selectedClientId, proposalName, photos.length]);
+
+  const { clear: clearDraft, restore: restoreDraft } = useAutoSave(`proposal-${proposalId}`, autoSaveData);
+
+  // After loading from Supabase, check if localStorage has newer data
+  const dbLoadedRef = useRef(false);
+  useEffect(() => {
+    if (loadingProposal || !selectedTemplate || dbLoadedRef.current) return;
+    dbLoadedRef.current = true;
+    const draft = restoreDraft();
+    if (draft && draft.formData && Object.keys(draft.formData).length > 0) {
+      // Compare: does the draft have more data than what's in the DB?
+      const dbFieldCount = Object.keys(formData).filter(k => formData[k]?.trim()).length;
+      const draftFieldCount = Object.keys(draft.formData).filter(k => draft.formData[k]?.trim()).length;
+      if (draftFieldCount > dbFieldCount) {
+        setRestoredDraft(draft);
+        setShowRestore(true);
+      } else {
+        // Draft is same or older — clear it
+        clearDraft();
+      }
+    }
+  }, [loadingProposal, selectedTemplate, formData, restoreDraft, clearDraft]);
+
+  const handleRestoreDraft = useCallback(() => {
+    if (!restoredDraft) return;
+    setFormData(restoredDraft.formData);
+    if (restoredDraft.inspectionDate) setInspectionDate(restoredDraft.inspectionDate);
+    if (restoredDraft.selectedClientId) setSelectedClientId(restoredDraft.selectedClientId);
+    if (restoredDraft.proposalName) setProposalName(restoredDraft.proposalName);
+    setShowRestore(false);
+    setRestoredDraft(null);
+  }, [restoredDraft]);
+
+  const handleDismissRestore = useCallback(() => {
+    setShowRestore(false);
+    setRestoredDraft(null);
+    clearDraft();
+  }, [clearDraft]);
 
   // Warn before tab close / refresh
+  const hasUnsavedWork = selectedTemplate !== null && Object.keys(formData).length > 0;
   useEffect(() => {
     if (!hasUnsavedWork) return;
     const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsavedWork]);
-
-  // Refs so the popstate handler always has fresh values without re-running the effect
-  const openSectionRef = useRef(openSectionIndex);
-  openSectionRef.current = openSectionIndex;
-
-  // Intercept browser back button: close panel first, then confirm before leaving
-  useEffect(() => {
-    if (!selectedTemplate) return;
-    window.history.pushState({ proposal: true }, "");
-    const onPopState = () => {
-      if (openSectionRef.current !== null) {
-        setOpenSectionIndex(null);
-        window.history.pushState({ proposal: true }, "");
-      } else {
-        const leave = window.confirm("Leave this proposal? Make sure you've saved your work.");
-        if (leave) {
-          router.push("/proposals");
-        } else {
-          window.history.pushState({ proposal: true }, "");
-        }
-      }
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  // Only re-run when template changes (not on every panel open/close)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTemplate]);
 
   // Load proposal + clients
   useEffect(() => {
@@ -126,8 +152,9 @@ export default function SavedProposalPage() {
       inspectionDate: inspectionDate || undefined,
       clientId: selectedClientId || undefined,
     });
+    clearDraft(); // Clear auto-save since it's now in Supabase
     setSaving(false);
-  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, save]);
+  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, save, clearDraft]);
 
   const handleFinalize = useCallback(async () => {
     if (!selectedTemplate) return;
@@ -428,6 +455,45 @@ export default function SavedProposalPage() {
           <ExportMenu getHtml={getExportHtml} getInternalHtml={getInternalHtml} getPlainText={getPlainText} filename={getFileName()} title={tmpl!.name} accentColor={tmpl!.color} />
         </div>
       </div>
+
+      {/* Restore Draft Banner */}
+      {showRestore && restoredDraft && (
+        <div style={{
+          maxWidth: 1400, margin: "0 auto", padding: isMobile ? "8px 12px" : "10px 20px",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
+            background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)",
+            borderRadius: 10, flexWrap: "wrap",
+          }}>
+            <span style={{ fontSize: 18 }}>{"\u{1F4BE}"}</span>
+            <div style={{ flex: 1, minWidth: 140 }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text)" }}>
+                Unsaved changes recovered
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text4)", marginTop: 1 }}>
+                Auto-saved {new Date(restoredDraft.savedAt).toLocaleString()}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={handleRestoreDraft} style={{
+                background: "linear-gradient(135deg,#F59E0B,#D97706)", border: "none",
+                borderRadius: 8, color: "#fff", cursor: "pointer", padding: "6px 14px",
+                fontSize: 11, fontWeight: 600,
+              }}>
+                Restore
+              </button>
+              <button onClick={handleDismissRestore} style={{
+                background: "var(--bg3)", border: "1px solid var(--border3)",
+                borderRadius: 8, color: "var(--text4)", cursor: "pointer", padding: "6px 12px",
+                fontSize: 11, fontWeight: 500,
+              }}>
+                Keep DB version
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div style={{ display: "flex", maxWidth: isMobile ? "100%" : 1400, margin: "0 auto", minHeight: "calc(100vh - 106px)", overflowX: "hidden" }}>

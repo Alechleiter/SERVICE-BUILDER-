@@ -20,6 +20,7 @@ import SectionPanel from "@/components/proposals/SectionPanel";
 import ExportMenu from "@/components/ExportMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useKeyboardShortcuts, SHORTCUT_LIST } from "@/hooks/useKeyboardShortcuts";
+import { useAutoSave, type AutoSaveData } from "@/hooks/useAutoSave";
 
 const SANS = "'DM Sans',sans-serif";
 const MONO = "'DM Mono',monospace";
@@ -47,6 +48,8 @@ export default function ProposalGeneratorPage() {
   const [clientsList, setClientsList] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showRestore, setShowRestore] = useState(false);
+  const [restoredDraft, setRestoredDraft] = useState<AutoSaveData | null>(null);
 
   // Sync theme
   useEffect(() => {
@@ -54,52 +57,57 @@ export default function ProposalGeneratorPage() {
     if (current) setIsDark(current === "dark");
   }, []);
 
-  // ── Prevent accidental back-navigation when editing ──
-  const hasUnsavedWork = selectedTemplate !== null && Object.keys(formData).length > 0;
+  // ── Auto-save to localStorage ──
+  const autoSaveData = useMemo<AutoSaveData | null>(() => {
+    if (!selectedTemplate || Object.keys(formData).length === 0) return null;
+    return {
+      templateId: selectedTemplate,
+      formData,
+      inspectionDate,
+      selectedClientId: selectedClientId || undefined,
+      photoCount: photos.length,
+      savedAt: Date.now(),
+    };
+  }, [selectedTemplate, formData, inspectionDate, selectedClientId, photos.length]);
+
+  const { clear: clearDraft, restore: restoreDraft } = useAutoSave("new-proposal", autoSaveData);
+
+  // Check for a saved draft on mount
+  useEffect(() => {
+    const draft = restoreDraft();
+    if (draft && draft.templateId && Object.keys(draft.formData).length > 0) {
+      setRestoredDraft(draft);
+      setShowRestore(true);
+    }
+  }, [restoreDraft]);
+
+  const handleRestoreDraft = useCallback(() => {
+    if (!restoredDraft) return;
+    setSelectedTemplate(restoredDraft.templateId as TemplateId);
+    setFormData(restoredDraft.formData);
+    setInspectionDate(restoredDraft.inspectionDate || "");
+    if (restoredDraft.selectedClientId) setSelectedClientId(restoredDraft.selectedClientId);
+    setShowRestore(false);
+    setRestoredDraft(null);
+  }, [restoredDraft]);
+
+  const handleDismissRestore = useCallback(() => {
+    setShowRestore(false);
+    setRestoredDraft(null);
+    clearDraft();
+  }, [clearDraft]);
+
+  // Clear auto-save draft when proposal is saved to Supabase
+  const clearDraftOnSave = clearDraft;
 
   // Warn before tab close / refresh
+  const hasUnsavedWork = selectedTemplate !== null && Object.keys(formData).length > 0;
   useEffect(() => {
     if (!hasUnsavedWork) return;
     const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsavedWork]);
-
-  // Refs so the popstate handler always has fresh values without re-running the effect
-  const openSectionRef = useRef(openSectionIndex);
-  openSectionRef.current = openSectionIndex;
-  const hasUnsavedRef = useRef(hasUnsavedWork);
-  hasUnsavedRef.current = hasUnsavedWork;
-
-  // Intercept browser back button: close panel → confirm → then allow navigation
-  useEffect(() => {
-    if (!selectedTemplate) return;
-    // Push ONE dummy state so "back" pops this instead of leaving the page
-    window.history.pushState({ proposal: true }, "");
-    const onPopState = () => {
-      if (openSectionRef.current !== null) {
-        setOpenSectionIndex(null);
-        window.history.pushState({ proposal: true }, "");
-      } else if (hasUnsavedRef.current) {
-        const leave = window.confirm("You have unsaved changes. Go back to templates?");
-        if (leave) {
-          setSelectedTemplate(null);
-          setFormData({});
-          setPhotos([]);
-          setInspectionDate("");
-          setMapData(null);
-        } else {
-          window.history.pushState({ proposal: true }, "");
-        }
-      } else {
-        setSelectedTemplate(null);
-      }
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  // Only re-run when template selection changes (not on every panel open/close)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTemplate]);
 
   // Load saved proposals + clients
   useEffect(() => {
@@ -121,8 +129,9 @@ export default function ProposalGeneratorPage() {
       clientId: selectedClientId || undefined,
     });
     setSaving(false);
+    clearDraftOnSave(); // Clear auto-save since it's now in Supabase
     if (id) router.push(`/proposals/${id}`);
-  }, [selectedTemplate, formData, inspectionDate, selectedClientId, saveProposal, router]);
+  }, [selectedTemplate, formData, inspectionDate, selectedClientId, saveProposal, router, clearDraftOnSave]);
 
   const handleTemplateSelect = (key: TemplateId) => {
     setSelectedTemplate(key);
@@ -318,6 +327,45 @@ export default function ProposalGeneratorPage() {
           </div>
           <p style={{ color: "var(--text4)", fontSize: 14, maxWidth: 500, margin: "12px auto 0" }}>Select a template to create a professional, client-ready proposal in minutes.</p>
         </div>
+
+        {/* Restore Draft Banner */}
+        {showRestore && restoredDraft && (
+          <div style={{
+            maxWidth: 960, margin: "0 auto 20px", padding: "0 16px",
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "14px 18px",
+              background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)",
+              borderRadius: 12, flexWrap: "wrap",
+            }}>
+              <span style={{ fontSize: 20 }}>{"\u{1F4BE}"}</span>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text)" }}>
+                  Unsaved draft found
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text4)", marginTop: 2 }}>
+                  {TEMPLATES[restoredDraft.templateId as TemplateId]?.name ?? "Proposal"} — saved {new Date(restoredDraft.savedAt).toLocaleString()}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={handleRestoreDraft} style={{
+                  background: "linear-gradient(135deg,#F59E0B,#D97706)", border: "none",
+                  borderRadius: 8, color: "#fff", cursor: "pointer", padding: "7px 16px",
+                  fontSize: 12, fontWeight: 600,
+                }}>
+                  Restore
+                </button>
+                <button onClick={handleDismissRestore} style={{
+                  background: "var(--bg3)", border: "1px solid var(--border3)",
+                  borderRadius: 8, color: "var(--text4)", cursor: "pointer", padding: "7px 14px",
+                  fontSize: 12, fontWeight: 500,
+                }}>
+                  Discard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Saved Proposals */}
         {user && savedProposals.length > 0 && (
