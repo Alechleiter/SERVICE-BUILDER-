@@ -14,6 +14,7 @@ export default function AuthPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -167,15 +168,27 @@ export default function AuthPage() {
 
           <div style={{ marginBottom: 24 }}>
             <label style={labelStyle}>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={mode === "signup" ? "Min 6 characters" : "Enter password"}
-              required
-              minLength={6}
-              style={inputStyle}
-            />
+            <div style={{ position: "relative" }}>
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={mode === "signup" ? "Min 6 characters" : "Enter password"}
+                required
+                minLength={6}
+                style={{ ...inputStyle, paddingRight: 42 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                  background: "none", border: "none", cursor: "pointer", padding: 4,
+                  fontSize: 16, color: "var(--text4)", lineHeight: 1,
+                }}>
+                {showPassword ? "\u{1F441}" : "\u{1F441}\u200D\u{1F5E8}"}
+              </button>
+            </div>
           </div>
 
           <button
