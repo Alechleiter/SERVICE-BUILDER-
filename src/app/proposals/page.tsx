@@ -54,6 +54,48 @@ export default function ProposalGeneratorPage() {
     if (current) setIsDark(current === "dark");
   }, []);
 
+  // ── Prevent accidental back-navigation when editing ──
+  const hasUnsavedWork = selectedTemplate !== null && Object.keys(formData).length > 0;
+
+  // Warn before tab close / refresh
+  useEffect(() => {
+    if (!hasUnsavedWork) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedWork]);
+
+  // Intercept browser back button: close panel → go to template picker → then allow navigation
+  useEffect(() => {
+    if (!selectedTemplate) return;
+    // Push a dummy state so "back" pops this first instead of leaving the page
+    window.history.pushState({ proposal: true }, "");
+    const onPopState = () => {
+      if (openSectionIndex !== null) {
+        // First back press: close the section panel
+        setOpenSectionIndex(null);
+        window.history.pushState({ proposal: true }, "");
+      } else if (hasUnsavedWork) {
+        // Second back press: confirm leaving the editor
+        const leave = window.confirm("You have unsaved changes. Go back to templates?");
+        if (leave) {
+          setSelectedTemplate(null);
+          setFormData({});
+          setPhotos([]);
+          setInspectionDate("");
+          setMapData(null);
+        } else {
+          window.history.pushState({ proposal: true }, "");
+        }
+      } else {
+        setSelectedTemplate(null);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTemplate, openSectionIndex, hasUnsavedWork]);
+
   // Load saved proposals + clients
   useEffect(() => {
     if (user) {

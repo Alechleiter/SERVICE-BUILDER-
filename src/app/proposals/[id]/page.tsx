@@ -59,6 +59,41 @@ export default function SavedProposalPage() {
     if (current) setIsDark(current === "dark");
   }, []);
 
+  // ── Prevent accidental back-navigation when editing ──
+  const hasUnsavedWork = selectedTemplate !== null && Object.keys(formData).length > 0;
+
+  // Warn before tab close / refresh
+  useEffect(() => {
+    if (!hasUnsavedWork) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedWork]);
+
+  // Intercept browser back button: close panel first, then confirm before leaving
+  useEffect(() => {
+    if (!selectedTemplate) return;
+    window.history.pushState({ proposal: true }, "");
+    const onPopState = () => {
+      if (openSectionIndex !== null) {
+        // First back: close section panel
+        setOpenSectionIndex(null);
+        window.history.pushState({ proposal: true }, "");
+      } else {
+        // Second back: confirm leaving the page
+        const leave = window.confirm("Leave this proposal? Make sure you've saved your work.");
+        if (leave) {
+          router.push("/proposals");
+        } else {
+          window.history.pushState({ proposal: true }, "");
+        }
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTemplate, openSectionIndex, router]);
+
   // Load proposal + clients
   useEffect(() => {
     if (!user || !proposalId) return;
