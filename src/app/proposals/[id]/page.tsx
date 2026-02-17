@@ -70,17 +70,19 @@ export default function SavedProposalPage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsavedWork]);
 
+  // Refs so the popstate handler always has fresh values without re-running the effect
+  const openSectionRef = useRef(openSectionIndex);
+  openSectionRef.current = openSectionIndex;
+
   // Intercept browser back button: close panel first, then confirm before leaving
   useEffect(() => {
     if (!selectedTemplate) return;
     window.history.pushState({ proposal: true }, "");
     const onPopState = () => {
-      if (openSectionIndex !== null) {
-        // First back: close section panel
+      if (openSectionRef.current !== null) {
         setOpenSectionIndex(null);
         window.history.pushState({ proposal: true }, "");
       } else {
-        // Second back: confirm leaving the page
         const leave = window.confirm("Leave this proposal? Make sure you've saved your work.");
         if (leave) {
           router.push("/proposals");
@@ -91,8 +93,9 @@ export default function SavedProposalPage() {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
+  // Only re-run when template changes (not on every panel open/close)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTemplate, openSectionIndex, router]);
+  }, [selectedTemplate]);
 
   // Load proposal + clients
   useEffect(() => {
@@ -344,9 +347,9 @@ export default function SavedProposalPage() {
     <div ref={mobileRef} style={{ minHeight: "calc(100vh - 48px)", background: "var(--bg)", color: "var(--text)", fontFamily: SANS, overflowX: "hidden" }}>
       {/* Top Bar */}
       <div style={{
-        position: "sticky", top: 48, zIndex: 100,
+        position: isMobile ? "relative" : "sticky", top: isMobile ? undefined : 48, zIndex: 100,
         background: isDark ? "rgba(15,15,15,0.92)" : "rgba(245,245,240,0.92)",
-        backdropFilter: "blur(12px)", borderBottom: "1px solid var(--border)",
+        backdropFilter: isMobile ? undefined : "blur(12px)", borderBottom: "1px solid var(--border)",
         padding: isMobile ? "8px 12px" : "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
         flexWrap: "wrap", gap: isMobile ? 6 : 10,
       }}>

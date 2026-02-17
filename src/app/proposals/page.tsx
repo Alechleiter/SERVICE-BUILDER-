@@ -65,18 +65,22 @@ export default function ProposalGeneratorPage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsavedWork]);
 
-  // Intercept browser back button: close panel → go to template picker → then allow navigation
+  // Refs so the popstate handler always has fresh values without re-running the effect
+  const openSectionRef = useRef(openSectionIndex);
+  openSectionRef.current = openSectionIndex;
+  const hasUnsavedRef = useRef(hasUnsavedWork);
+  hasUnsavedRef.current = hasUnsavedWork;
+
+  // Intercept browser back button: close panel → confirm → then allow navigation
   useEffect(() => {
     if (!selectedTemplate) return;
-    // Push a dummy state so "back" pops this first instead of leaving the page
+    // Push ONE dummy state so "back" pops this instead of leaving the page
     window.history.pushState({ proposal: true }, "");
     const onPopState = () => {
-      if (openSectionIndex !== null) {
-        // First back press: close the section panel
+      if (openSectionRef.current !== null) {
         setOpenSectionIndex(null);
         window.history.pushState({ proposal: true }, "");
-      } else if (hasUnsavedWork) {
-        // Second back press: confirm leaving the editor
+      } else if (hasUnsavedRef.current) {
         const leave = window.confirm("You have unsaved changes. Go back to templates?");
         if (leave) {
           setSelectedTemplate(null);
@@ -93,8 +97,9 @@ export default function ProposalGeneratorPage() {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
+  // Only re-run when template selection changes (not on every panel open/close)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTemplate, openSectionIndex, hasUnsavedWork]);
+  }, [selectedTemplate]);
 
   // Load saved proposals + clients
   useEffect(() => {
@@ -384,9 +389,9 @@ export default function ProposalGeneratorPage() {
     <div ref={mobileRef} style={{ minHeight: "calc(100vh - 48px)", background: "var(--bg)", color: "var(--text)", fontFamily: SANS, overflowX: "hidden" }}>
       {/* Top Bar */}
       <div style={{
-        position: "sticky", top: 48, zIndex: 100,
+        position: isMobile ? "relative" : "sticky", top: isMobile ? undefined : 48, zIndex: 100,
         background: isDark ? "rgba(15,15,15,0.92)" : "rgba(245,245,240,0.92)",
-        backdropFilter: "blur(12px)", borderBottom: "1px solid var(--border)",
+        backdropFilter: isMobile ? undefined : "blur(12px)", borderBottom: "1px solid var(--border)",
         padding: isMobile ? "8px 12px" : "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
         flexWrap: "wrap", gap: isMobile ? 6 : 10,
       }}>
