@@ -274,7 +274,7 @@ export default function ProposalGeneratorPage() {
 
         {/* Saved Proposals */}
         {user && savedProposals.length > 0 && (
-          <div style={{ maxWidth: 960, margin: "0 auto 28px", padding: "0 24px" }}>
+          <div style={{ maxWidth: 960, margin: "0 auto 28px", padding: "0 16px" }}>
             <h3 style={{ fontSize: 13, fontWeight: 700, color: "var(--text4)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "1px", fontFamily: MONO }}>
               Saved Proposals
             </h3>
@@ -315,7 +315,7 @@ export default function ProposalGeneratorPage() {
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 16, maxWidth: 960, margin: "0 auto", padding: "0 24px 60px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%, 260px),1fr))", gap: 16, maxWidth: 960, margin: "0 auto", padding: "0 16px 60px" }}>
           {(Object.entries(TEMPLATES) as [TemplateId, TemplateDefinition][]).map(([key, t], i) => (
             <button key={key} onClick={() => handleTemplateSelect(key)}
               style={{
@@ -339,7 +339,7 @@ export default function ProposalGeneratorPage() {
   const openSection = openSectionIndex !== null ? sections[openSectionIndex] : null;
 
   return (
-    <div ref={mobileRef} style={{ minHeight: "calc(100vh - 48px)", background: "var(--bg)", color: "var(--text)", fontFamily: SANS }}>
+    <div ref={mobileRef} style={{ minHeight: "calc(100vh - 48px)", background: "var(--bg)", color: "var(--text)", fontFamily: SANS, overflowX: "hidden" }}>
       {/* Top Bar */}
       <div style={{
         position: "sticky", top: 48, zIndex: 100,

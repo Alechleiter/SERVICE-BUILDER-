@@ -306,7 +306,7 @@ export default function SavedProposalPage() {
   const openSection = openSectionIndex !== null ? sections[openSectionIndex] : null;
 
   return (
-    <div ref={mobileRef} style={{ minHeight: "calc(100vh - 48px)", background: "var(--bg)", color: "var(--text)", fontFamily: SANS }}>
+    <div ref={mobileRef} style={{ minHeight: "calc(100vh - 48px)", background: "var(--bg)", color: "var(--text)", fontFamily: SANS, overflowX: "hidden" }}>
       {/* Top Bar */}
       <div style={{
         position: "sticky", top: 48, zIndex: 100,

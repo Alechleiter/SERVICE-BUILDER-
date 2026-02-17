@@ -151,7 +151,7 @@ export default function PhotoUploader({ photos, onPhotosChange, inspectionDate, 
           onDrop={(e) => handleDrop(e, idx)}
           onDragEnd={handleDragEnd}
           style={{
-            marginBottom: 14, background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, padding: 12, position: "relative",
+            marginBottom: 14, background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 10px", position: "relative", overflow: "hidden",
             opacity: dragIdx === idx ? 0.35 : 1,
             borderTop: dragOverIdx === idx && dragIdx !== idx ? `3px solid ${accentColor}` : undefined,
             transition: "opacity 0.15s",
@@ -178,7 +178,7 @@ export default function PhotoUploader({ photos, onPhotosChange, inspectionDate, 
               {/* Zone selector */}
               <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
                 <select value={photo.zone} onChange={(e) => updatePhoto(photo.id, { zone: e.target.value })}
-                  style={{ ...iS, flex: 1, minWidth: 140, cursor: "pointer" }}>
+                  style={{ ...iS, flex: 1, minWidth: 0, cursor: "pointer" }}>
                   {ZONE_PRESETS.map((z) => (
                     <option key={z.value} value={z.value}>{z.icon} {z.label}</option>
                   ))}
@@ -189,14 +189,14 @@ export default function PhotoUploader({ photos, onPhotosChange, inspectionDate, 
                 )}
                 {photo.zone === "custom" && (
                   <input type="text" value={photo.customZone} onChange={(e) => updatePhoto(photo.id, { customZone: e.target.value })}
-                    placeholder="Zone name" style={{ ...iS, flex: 1, minWidth: 100 }} />
+                    placeholder="Zone name" style={{ ...iS, flex: 1, minWidth: 0 }} />
                 )}
               </div>
 
               {/* Concern type */}
               <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
                 <select value={photo.concernType || ""} onChange={(e) => updatePhoto(photo.id, { concernType: e.target.value })}
-                  style={{ ...iS, flex: 1, minWidth: 140, cursor: "pointer" }}>
+                  style={{ ...iS, flex: 1, minWidth: 0, cursor: "pointer" }}>
                   <option value="">-- Concern Type --</option>
                   {CONCERN_TYPES.map((ct) => (
                     <option key={ct} value={ct}>{ct}</option>

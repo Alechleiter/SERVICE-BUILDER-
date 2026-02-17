@@ -125,8 +125,9 @@ export default function SectionPanel({
           ref={scrollRef}
           style={{
             flex: 1,
-            overflow: "auto",
-            padding: 16,
+            overflowX: "hidden",
+            overflowY: "auto",
+            padding: "16px 12px",
             WebkitOverflowScrolling: "touch",
           }}
         >

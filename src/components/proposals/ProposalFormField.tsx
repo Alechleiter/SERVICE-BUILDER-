@@ -208,13 +208,13 @@ export default function ProposalFormField({ field, value, onChange, animDelay }:
         return (
           <div>
             {items.map((item, i) => (
-              <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-start" }}>
+              <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-start", minWidth: 0 }}>
                 <span style={{ color: "var(--text4)", fontSize: 13, fontWeight: 700, marginTop: 9, flexShrink: 0, userSelect: "none" }}>{"\u2022"}</span>
                 <textarea value={item}
                   onChange={(e) => { const next = [...items]; next[i] = e.target.value; update(next); }}
                   placeholder={i === 0 ? (field.placeholder || "Enter finding...") : "Enter another finding..."}
                   rows={2}
-                  style={{ ...iStyle, resize: "vertical", flex: 1 }} />
+                  style={{ ...iStyle, resize: "vertical", flex: 1, minWidth: 0 }} />
                 {items.length > 1 && (
                   <button onClick={() => update(items.filter((_, j) => j !== i))}
                     style={{ background: "none", border: "none", color: "#f85149", cursor: "pointer", fontSize: 14, padding: "8px 4px", flexShrink: 0, lineHeight: 1 }}
