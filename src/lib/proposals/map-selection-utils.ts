@@ -18,12 +18,7 @@ export interface BoundingBox {
 export function getStrokeBBox(s: DrawingStroke): BoundingBox {
   switch (s.tool) {
     case "pen":
-    case "line":
-    case "door":
-    case "double-door":
-    case "sliding-door":
-    case "rollup-door":
-    case "window": {
+    case "line": {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       for (let i = 0; i < s.points.length; i += 2) {
         minX = Math.min(minX, s.points[i]);
@@ -193,12 +188,7 @@ export function scaleStrokePoints(
 
   switch (s.tool) {
     case "pen":
-    case "line":
-    case "door":
-    case "double-door":
-    case "sliding-door":
-    case "rollup-door":
-    case "window": {
+    case "line": {
       const newPts = [...s.points];
       for (let i = 0; i < newPts.length; i += 2) {
         newPts[i] = newBBox.minX + (newPts[i] - origBBox.minX) * scaleX;
