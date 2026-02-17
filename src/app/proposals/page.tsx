@@ -19,6 +19,7 @@ import SectionList from "@/components/proposals/SectionList";
 import SectionPanel from "@/components/proposals/SectionPanel";
 import ExportMenu from "@/components/ExportMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useKeyboardShortcuts, SHORTCUT_LIST } from "@/hooks/useKeyboardShortcuts";
 
 const SANS = "'DM Sans',sans-serif";
 const MONO = "'DM Mono',monospace";
@@ -45,6 +46,7 @@ export default function ProposalGeneratorPage() {
   const [openSectionIndex, setOpenSectionIndex] = useState<number | null>(null);
   const [clientsList, setClientsList] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Sync theme
   useEffect(() => {
@@ -185,6 +187,20 @@ export default function ProposalGeneratorPage() {
       prev !== null && prev < sections.length - 1 ? prev + 1 : prev,
     );
   }, [sections.length]);
+
+  // Keyboard shortcuts (desktop)
+  useKeyboardShortcuts({
+    onSave: handleSaveProposal,
+    onTogglePreview: () => { setActiveTab("preview"); setOpenSectionIndex(null); },
+    onToggleEdit: () => setActiveTab("form"),
+    onEscape: () => {
+      if (openSectionIndex !== null) setOpenSectionIndex(null);
+      else setSelectedTemplate(null);
+    },
+    onNextSection: handleSectionNext,
+    onPrevSection: handleSectionPrev,
+    onToggleHelp: () => setShowShortcuts((p) => !p),
+  }, !!selectedTemplate);
 
   // Render content for a given section
   const renderSectionContent = (sectionIdx: number) => {
@@ -483,6 +499,59 @@ export default function ProposalGeneratorPage() {
           </div>
         </div>
       </div>
+
+      {/* Keyboard shortcut help button (desktop only) */}
+      {!isMobile && (
+        <button
+          onClick={() => setShowShortcuts((p) => !p)}
+          title="Keyboard shortcuts (Ctrl+/)"
+          style={{
+            position: "fixed", bottom: 20, right: 20, zIndex: 200,
+            width: 36, height: 36, borderRadius: "50%",
+            background: "var(--bg3)", border: "1px solid var(--border3)",
+            color: "var(--text4)", cursor: "pointer", fontSize: 16, fontWeight: 700,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+          }}>
+          ?
+        </button>
+      )}
+
+      {/* Keyboard shortcuts overlay */}
+      {showShortcuts && (
+        <div
+          onClick={() => setShowShortcuts(false)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 300,
+            background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "var(--bg2)", border: "1px solid var(--border2)",
+              borderRadius: 14, padding: "24px 28px", minWidth: 320,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+            }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700 }}>Keyboard Shortcuts</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {SHORTCUT_LIST.map((s) => (
+                <div key={s.keys} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24 }}>
+                  <span style={{ fontSize: 13, color: "var(--text4)" }}>{s.label}</span>
+                  <kbd style={{
+                    fontSize: 11, padding: "3px 8px", borderRadius: 6,
+                    background: "var(--bg3)", border: "1px solid var(--border3)",
+                    color: "var(--text)", fontFamily: MONO, fontWeight: 600,
+                  }}>{s.keys}</kbd>
+                </div>
+              ))}
+            </div>
+            <p style={{ margin: "16px 0 0", fontSize: 11, color: "var(--text5)", textAlign: "center" }}>
+              Press Esc or click outside to close
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
