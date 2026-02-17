@@ -19,7 +19,10 @@ export default function NavBar() {
   };
 
   /* ── Simple mobile check ── */
-  const [isNarrow, setIsNarrow] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(() => {
+    if (typeof window !== "undefined") return window.innerWidth < 600;
+    return false;
+  });
   useEffect(() => {
     const check = () => setIsNarrow(window.innerWidth < 600);
     check();

@@ -417,15 +417,15 @@ export default function ProposalGeneratorPage() {
       </div>
 
       {/* Content */}
-      <div style={{ display: "flex", maxWidth: 1400, margin: "0 auto", minHeight: "calc(100vh - 106px)" }}>
+      <div style={{ display: "flex", maxWidth: isMobile ? "100%" : 1400, margin: "0 auto", minHeight: "calc(100vh - 106px)", overflowX: "hidden" }}>
         {/* Left: Section List + Slide Panel */}
         <div
           style={{
             width: activeTab === "form" ? (isMobile ? "100%" : 220) : 0,
             overflow: activeTab === "form" ? "visible" : "hidden",
-            transition: "width 0.3s",
+            transition: isMobile ? "none" : "width 0.3s",
             borderRight: activeTab === "form" && !isMobile ? "1px solid var(--border)" : "none",
-            flexShrink: 0,
+            flexShrink: isMobile ? 1 : 0,
             position: "relative",
           }}
         >
