@@ -331,16 +331,18 @@ export interface Database {
           custom_zone: string;
           sort_order: number;
           created_at: string;
+          data_url: string | null;
         };
         Insert: {
           proposal_id: string;
-          storage_path: string;
+          storage_path?: string;
           file_name: string;
           caption?: string;
           zone?: string;
           unit_number?: string;
           custom_zone?: string;
           sort_order?: number;
+          data_url?: string | null;
         };
         Update: {
           storage_path?: string;
@@ -350,6 +352,7 @@ export interface Database {
           unit_number?: string;
           custom_zone?: string;
           sort_order?: number;
+          data_url?: string | null;
         };
         Relationships: [
           {

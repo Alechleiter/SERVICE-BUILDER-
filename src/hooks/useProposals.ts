@@ -15,22 +15,6 @@ export interface ProposalListItem {
   client_id: string | null;
 }
 
-/** Convert base64 data URL to a File object for upload */
-function dataUrlToFile(dataUrl: string, fileName: string): File | null {
-  try {
-    const [header, base64] = dataUrl.split(",");
-    if (!header || !base64) return null;
-    const mimeMatch = header.match(/:(.*?);/);
-    const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
-    const bytes = atob(base64);
-    const arr = new Uint8Array(bytes.length);
-    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-    return new File([arr], fileName, { type: mime });
-  } catch {
-    return null;
-  }
-}
-
 export function useProposals() {
   const { user } = useAuth();
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
@@ -176,7 +160,7 @@ export function useProposals() {
       if (proposalId && proposal.photos && proposal.photos.length > 0) {
         try {
           console.log("[useProposals] Saving", proposal.photos.length, "photos for proposal", proposalId);
-          await savePhotos(supabase, user.id, proposalId, proposal.photos);
+          await savePhotos(supabase, proposalId, proposal.photos);
           console.log("[useProposals] Photos saved successfully");
         } catch (e) {
           const photoMsg = e instanceof Error ? e.message : String(e);
@@ -215,10 +199,11 @@ export function useProposals() {
       if (!proposal) return null;
 
       // Convert DB photo rows to PhotoEntry objects
+      // Use data_url (base64) directly — no Storage URLs needed
       const dbPhotos = (photosResult.data ?? []) as ProposalPhoto[];
       const photos: PhotoEntry[] = dbPhotos.map((p, i) => ({
         id: i + 1,
-        src: getPublicUrl(supabase, p.storage_path),
+        src: p.data_url || "",
         caption: p.caption ?? "",
         fileName: p.file_name ?? "",
         zone: p.zone ?? "",
@@ -240,16 +225,9 @@ export function useProposals() {
     async (id: string) => {
       if (!user) return;
       const supabase = createClient();
-      // Delete photos from storage first
-      const { data: photoRows } = await supabase
-        .from("proposal_photos")
-        .select("storage_path")
-        .eq("proposal_id", id);
-      if (photoRows && photoRows.length > 0) {
-        const paths = photoRows.map((r: { storage_path: string }) => r.storage_path);
-        await supabase.storage.from("proposal-photos").remove(paths);
-        await supabase.from("proposal_photos").delete().eq("proposal_id", id);
-      }
+      // Delete photo rows for this proposal
+      await supabase.from("proposal_photos").delete().eq("proposal_id", id);
+      // Delete the proposal itself
       const { error } = await supabase.from("proposals").delete().eq("id", id);
       if (error) {
         console.error("[useProposals] delete error:", error.message);
@@ -344,93 +322,51 @@ export function useProposals() {
 
 // ── Internal helpers ──
 
-function getPublicUrl(supabase: ReturnType<typeof createClient>, storagePath: string): string {
-  const { data } = supabase.storage.from("proposal-photos").getPublicUrl(storagePath);
-  return data?.publicUrl ?? "";
-}
-
+/**
+ * Save photos directly to proposal_photos table with base64 data_url.
+ * No Supabase Storage needed — simpler and avoids bucket/policy complexity.
+ */
 async function savePhotos(
   supabase: ReturnType<typeof createClient>,
-  userId: string,
   proposalId: string,
   photos: PhotoEntry[],
 ): Promise<void> {
-  // Get existing photos for this proposal
-  const { data: existingRows } = await supabase
+  // Delete existing photos for this proposal (simple replace strategy)
+  const { error: deleteErr } = await supabase
     .from("proposal_photos")
-    .select("id, storage_path")
+    .delete()
     .eq("proposal_id", proposalId);
 
-  const existing = (existingRows ?? []) as { id: string; storage_path: string }[];
-
-  // Delete old photos (simple replace strategy — delete all, re-upload new)
-  if (existing.length > 0) {
-    const oldPaths = existing.map((r) => r.storage_path);
-    await supabase.storage.from("proposal-photos").remove(oldPaths);
-    await supabase.from("proposal_photos").delete().eq("proposal_id", proposalId);
+  if (deleteErr) {
+    console.warn("[savePhotos] Delete old photos failed:", deleteErr.message);
+    // Continue anyway — inserts may still work
   }
 
-  // Upload each photo
+  // Insert each photo with base64 data directly in data_url column
   for (let i = 0; i < photos.length; i++) {
     const photo = photos[i];
-    console.log(`[savePhotos] Processing photo ${i + 1}/${photos.length}, src starts with:`, photo.src.substring(0, 50));
+    console.log(`[savePhotos] Inserting photo ${i + 1}/${photos.length}, src length: ${photo.src.length}`);
 
-    // If src is already a URL (loaded from Supabase), skip re-upload
-    if (photo.src.startsWith("http")) {
-      // Re-insert the DB row with the existing path
-      const pathMatch = photo.src.match(/proposal-photos\/(.+)$/);
-      if (pathMatch) {
-        const { error: reInsertErr } = await supabase.from("proposal_photos").insert({
-          proposal_id: proposalId,
-          storage_path: pathMatch[1],
-          file_name: photo.fileName || `photo_${i + 1}.jpg`,
-          caption: photo.caption || "",
-          zone: photo.zone || "",
-          unit_number: photo.unitNumber || "",
-          custom_zone: photo.customZone || "",
-          sort_order: i,
-        });
-        if (reInsertErr) console.error("[savePhotos] Re-insert DB row failed:", reInsertErr.message);
-      }
-      continue;
-    }
-
-    // Convert base64 to File and upload
-    const file = dataUrlToFile(photo.src, photo.fileName || `photo_${i + 1}.jpg`);
-    if (!file) {
-      console.error(`[savePhotos] Failed to convert photo ${i + 1} from base64 to File`);
-      continue;
-    }
-    console.log(`[savePhotos] Uploading photo ${i + 1}: ${file.name}, size: ${file.size} bytes`);
-
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const storagePath = `${userId}/${proposalId}/${Date.now()}_${i}_${safeName}`;
-
-    const { error: uploadErr } = await supabase.storage
-      .from("proposal-photos")
-      .upload(storagePath, file, { cacheControl: "3600", upsert: false });
-
-    if (uploadErr) {
-      console.error(`[savePhotos] Storage upload failed for photo ${i + 1}:`, uploadErr.message);
-      continue;
-    }
-    console.log(`[savePhotos] Upload success, path: ${storagePath}`);
-
-    // Insert row into proposal_photos
-    const { error: dbErr } = await supabase.from("proposal_photos").insert({
+    const { error: insertErr } = await supabase.from("proposal_photos").insert({
       proposal_id: proposalId,
-      storage_path: storagePath,
+      storage_path: `inline_${i}`,  // placeholder — not used for inline storage
       file_name: photo.fileName || `photo_${i + 1}.jpg`,
       caption: photo.caption || "",
       zone: photo.zone || "",
       unit_number: photo.unitNumber || "",
       custom_zone: photo.customZone || "",
       sort_order: i,
+      data_url: photo.src,  // Store base64 data URL directly in DB
     });
-    if (dbErr) {
-      console.error(`[savePhotos] DB insert failed for photo ${i + 1}:`, dbErr.message);
+
+    if (insertErr) {
+      console.error(`[savePhotos] Insert failed for photo ${i + 1}:`, insertErr.message);
+      // If data_url column doesn't exist, try without it (fallback)
+      if (insertErr.message?.includes("data_url")) {
+        console.warn("[savePhotos] data_url column not found — run the migration SQL! Photo will be skipped.");
+      }
     } else {
-      console.log(`[savePhotos] DB row inserted for photo ${i + 1}`);
+      console.log(`[savePhotos] Photo ${i + 1} saved to DB`);
     }
   }
 }
