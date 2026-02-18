@@ -18,6 +18,7 @@ import ProposalFormField from "@/components/proposals/ProposalFormField";
 import SectionList from "@/components/proposals/SectionList";
 import SectionPanel from "@/components/proposals/SectionPanel";
 import ExportMenu from "@/components/ExportMenu";
+import { exportWord } from "@/lib/export";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useKeyboardShortcuts, SHORTCUT_LIST } from "@/hooks/useKeyboardShortcuts";
 import { useAutoSave, type AutoSaveData } from "@/hooks/useAutoSave";
@@ -187,13 +188,20 @@ export default function SavedProposalPage() {
     const content = generateContent(selectedTemplate, formData);
     const customerHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "customer");
     const internalHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "internal");
+    const customerWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "customer", mapImageRef.current);
+    const internalWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "internal", mapImageRef.current);
     // Save snapshots
     const version = await finalize({ proposalId, customerHtml, internalHtml, formData });
+    // Auto-download both Word docs
+    const fileName = (formData.property_name || formData.restaurant_name || proposalName || "Proposal").replace(/[<>:"/\\|?*]/g, "").trim();
+    exportWord(customerWordHtml, fileName);
+    exportWord(internalWordHtml, `${fileName}_Internal`);
     setFinalizedVersion(version);
+    clearDraft();
     setFinalizing(false);
     // Clear notification after 3 seconds
     setTimeout(() => setFinalizedVersion(null), 3000);
-  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, photos, mapData, save, finalize]);
+  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, photos, mapData, save, finalize, clearDraft]);
 
   const handleFieldChange = useCallback((key: string, value: string) => {
     setFormData((p) => ({ ...p, [key]: value }));
