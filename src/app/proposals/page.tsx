@@ -31,7 +31,7 @@ const MONO = "'DM Mono',monospace";
 export default function ProposalGeneratorPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { list: listProposals, save: saveProposal } = useProposals();
+  const { list: listProposals, save: saveProposal, finalize: finalizeProposal } = useProposals();
   const { list: listClients } = useClients();
   const [isMobile, mobileRef] = useIsMobile(768);
 
@@ -44,6 +44,7 @@ export default function ProposalGeneratorPage() {
   const [isDark, setIsDark] = useState(true);
   const [savedProposals, setSavedProposals] = useState<ProposalListItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
   const [openSectionIndex, setOpenSectionIndex] = useState<number | null>(null);
   const [clientsList, setClientsList] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
@@ -140,6 +141,33 @@ export default function ProposalGeneratorPage() {
       router.push(`/proposals/${id}`);
     }
   }, [selectedTemplate, formData, inspectionDate, selectedClientId, mapData, photos, saveProposal, router, clearDraftOnSave]);
+
+  const handleSaveAndFinalize = useCallback(async () => {
+    if (!selectedTemplate) return;
+    setFinalizing(true);
+    const name = formData.property_name || formData.restaurant_name || TEMPLATES[selectedTemplate].name;
+    // 1. Save everything to Supabase first
+    const id = await saveProposal({
+      templateId: selectedTemplate,
+      name,
+      formData,
+      inspectionDate: inspectionDate || undefined,
+      clientId: selectedClientId || undefined,
+      mapData: mapData || undefined,
+      photos: photos.length > 0 ? photos : undefined,
+    });
+    if (id) {
+      // 2. Generate finalized HTML snapshots
+      const content = generateContent(selectedTemplate, formData);
+      const customerHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "customer");
+      const internalHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "internal");
+      // 3. Save snapshots + mark as "sent"
+      await finalizeProposal({ proposalId: id, customerHtml, internalHtml, formData });
+      clearDraftOnSave();
+      router.push(`/proposals/${id}`);
+    }
+    setFinalizing(false);
+  }, [selectedTemplate, formData, inspectionDate, selectedClientId, mapData, photos, saveProposal, finalizeProposal, router, clearDraftOnSave]);
 
   const handleTemplateSelect = (key: TemplateId) => {
     setSelectedTemplate(key);
@@ -502,13 +530,21 @@ export default function ProposalGeneratorPage() {
                   ))}
                 </select>
               )}
-              <button onClick={handleSaveProposal} disabled={saving}
+              <button onClick={handleSaveProposal} disabled={saving || finalizing}
                 style={{
                   background: saving ? "var(--bg3)" : "linear-gradient(135deg,#10b981,#059669)",
                   border: "none", borderRadius: 8, color: "#fff", cursor: saving ? "not-allowed" : "pointer",
                   padding: "5px 14px", fontSize: 12, fontWeight: 600, opacity: saving ? 0.6 : 1,
                 }}>
-                {saving ? "..." : "Save"}
+                {saving ? "Saving..." : "Save Draft"}
+              </button>
+              <button onClick={handleSaveAndFinalize} disabled={saving || finalizing}
+                style={{
+                  background: finalizing ? "var(--bg3)" : "linear-gradient(135deg,#F59E0B,#D97706)",
+                  border: "none", borderRadius: 8, color: "#fff", cursor: finalizing ? "not-allowed" : "pointer",
+                  padding: "5px 14px", fontSize: 12, fontWeight: 600, opacity: finalizing ? 0.6 : 1,
+                }}>
+                {finalizing ? "Finalizing..." : "\u{1F4E8} Save & Finalize"}
               </button>
             </>
           )}
