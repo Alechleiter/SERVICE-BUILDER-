@@ -191,7 +191,8 @@ export default function SavedProposalPage() {
 
   const getFileName = useCallback(() => {
     const name = formData.property_name || formData.restaurant_name || proposalName || "Proposal";
-    return name.replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "_");
+    // Keep original name — only strip characters unsafe for filenames
+    return name.replace(/[<>:"/\\|?*]/g, "").trim();
   }, [formData, proposalName]);
 
   const getExportHtml = useCallback((opts?: { forWord?: boolean }) => {

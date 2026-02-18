@@ -79,8 +79,8 @@ export async function exportPDF(html: string, title = "Document"): Promise<void>
       pdf.addImage(sliceData, "JPEG", marginPt, marginPt, contentWidthPt, destH);
     }
 
-    // Sanitize filename
-    const safeName = title.replace(/[^a-zA-Z0-9 _()-]/g, "").trim() || "proposal";
+    // Sanitize filename — only strip characters unsafe for filenames
+    const safeName = title.replace(/[<>:"/\\|?*]/g, "").trim() || "proposal";
     pdf.save(`${safeName}.pdf`);
   } finally {
     document.body.removeChild(container);

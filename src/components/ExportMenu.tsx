@@ -65,7 +65,7 @@ export default function ExportMenu({
     showFeedback("Generating PDF\u2026");
     try {
       const html = getHtml();
-      await exportPDF(html, title);
+      await exportPDF(html, filename || title);
       showFeedback("\u2713 PDF saved");
     } catch {
       showFeedback("PDF failed");
@@ -73,12 +73,12 @@ export default function ExportMenu({
       setExporting(false);
     }
     setOpen(false);
-  }, [getHtml, title, showFeedback]);
+  }, [getHtml, filename, title, showFeedback]);
 
   const handlePrint = useCallback(() => {
-    printContent(getHtml(), title);
+    printContent(getHtml(), filename || title);
     setOpen(false);
-  }, [getHtml, title]);
+  }, [getHtml, filename, title]);
 
   // Internal exports
   const handleInternalPDF = useCallback(async () => {
@@ -86,7 +86,7 @@ export default function ExportMenu({
     setExporting(true);
     showFeedback("Generating PDF\u2026");
     try {
-      await exportPDF(getInternalHtml(), `${title} (Internal)`);
+      await exportPDF(getInternalHtml(), `${filename || title} (Internal)`);
       showFeedback("\u2713 PDF saved");
     } catch {
       showFeedback("PDF failed");
@@ -94,7 +94,7 @@ export default function ExportMenu({
       setExporting(false);
     }
     setOpen(false);
-  }, [getInternalHtml, title, showFeedback]);
+  }, [getInternalHtml, filename, title, showFeedback]);
 
   const handleInternalWord = useCallback(() => {
     if (!getInternalHtml) return;
