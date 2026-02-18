@@ -110,7 +110,15 @@ export function useProposals() {
           client_id: proposal.clientId ?? null,
           session_id: proposal.sessionId ?? null,
         };
-        const { error } = await supabase.from("proposals").update(update).eq("id", proposal.id);
+        let { error } = await supabase.from("proposals").update(update).eq("id", proposal.id);
+        // If map_data column doesn't exist yet, retry without it
+        if (error && error.message?.includes("map_data")) {
+          console.warn("[useProposals] map_data column not found, saving without it");
+          const { map_data: _removed, ...updateWithout } = update;
+          void _removed;
+          const retry = await supabase.from("proposals").update(updateWithout).eq("id", proposal.id);
+          error = retry.error;
+        }
         if (error) {
           const msg = `Save failed (update): ${error.message}${error.details ? " — " + error.details : ""}${error.hint ? " — Hint: " + error.hint : ""}`;
           console.error("[useProposals]", msg, error);
@@ -131,11 +139,24 @@ export function useProposals() {
           client_id: proposal.clientId ?? null,
           session_id: proposal.sessionId ?? null,
         };
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from("proposals")
           .insert(insert)
           .select("id")
           .single();
+        // If map_data column doesn't exist yet, retry without it
+        if (error && error.message?.includes("map_data")) {
+          console.warn("[useProposals] map_data column not found, saving without it");
+          const { map_data: _removed, ...insertWithout } = insert;
+          void _removed;
+          const retry = await supabase
+            .from("proposals")
+            .insert(insertWithout)
+            .select("id")
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
         if (error) {
           const msg = `Save failed (insert): ${error.message}${error.details ? " — " + error.details : ""}${error.hint ? " — Hint: " + error.hint : ""}`;
           console.error("[useProposals]", msg, error);
