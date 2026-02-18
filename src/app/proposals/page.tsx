@@ -131,13 +131,15 @@ export default function ProposalGeneratorPage() {
       formData,
       inspectionDate: inspectionDate || undefined,
       clientId: selectedClientId || undefined,
+      mapData: mapData || undefined,
+      photos: photos.length > 0 ? photos : undefined,
     });
     setSaving(false);
     if (id) {
       clearDraftOnSave(); // Only clear auto-save AFTER confirmed save
       router.push(`/proposals/${id}`);
     }
-  }, [selectedTemplate, formData, inspectionDate, selectedClientId, saveProposal, router, clearDraftOnSave]);
+  }, [selectedTemplate, formData, inspectionDate, selectedClientId, mapData, photos, saveProposal, router, clearDraftOnSave]);
 
   const handleTemplateSelect = (key: TemplateId) => {
     setSelectedTemplate(key);

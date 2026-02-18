@@ -243,6 +243,7 @@ export interface Database {
           template_id: string;
           name: string | null;
           form_data: Json;
+          map_data: Json | null;
           inspection_date: string | null;
           status: "draft" | "sent" | "accepted" | "declined";
           created_at: string;
@@ -252,6 +253,7 @@ export interface Database {
           user_id: string;
           template_id: string;
           form_data?: Json;
+          map_data?: Json | null;
           name?: string | null;
           client_id?: string | null;
           session_id?: string | null;
@@ -261,6 +263,7 @@ export interface Database {
         Update: {
           template_id?: string;
           form_data?: Json;
+          map_data?: Json | null;
           name?: string | null;
           client_id?: string | null;
           session_id?: string | null;

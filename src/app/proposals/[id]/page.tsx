@@ -133,13 +133,16 @@ export default function SavedProposalPage() {
     listClients().then((items) => setClientsList(items));
     (async () => {
       setLoadingProposal(true);
-      const proposal = await load(proposalId);
-      if (proposal) {
+      const result = await load(proposalId);
+      if (result) {
+        const { proposal, photos: dbPhotos, mapData: dbMapData } = result;
         setSelectedTemplate(proposal.template_id as TemplateId);
         setFormData((proposal.form_data ?? {}) as Record<string, string>);
         setProposalName(proposal.name ?? "");
         if (proposal.inspection_date) setInspectionDate(proposal.inspection_date);
         if (proposal.client_id) setSelectedClientId(proposal.client_id);
+        if (dbPhotos.length > 0) setPhotos(dbPhotos);
+        if (dbMapData) setMapData(dbMapData);
       }
       setLoadingProposal(false);
     })();
@@ -156,13 +159,15 @@ export default function SavedProposalPage() {
         formData,
         inspectionDate: inspectionDate || undefined,
         clientId: selectedClientId || undefined,
+        mapData: mapData || undefined,
+        photos: photos.length > 0 ? photos : undefined,
       });
       clearDraft(); // Only clear auto-save AFTER confirmed save
     } catch {
       // Save failed — keep the auto-save draft as backup
     }
     setSaving(false);
-  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, save, clearDraft]);
+  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, mapData, photos, save, clearDraft]);
 
   const handleFinalize = useCallback(async () => {
     if (!selectedTemplate) return;
@@ -175,6 +180,8 @@ export default function SavedProposalPage() {
       formData,
       inspectionDate: inspectionDate || undefined,
       clientId: selectedClientId || undefined,
+      mapData: mapData || undefined,
+      photos: photos.length > 0 ? photos : undefined,
     });
     // Generate both versions
     const content = generateContent(selectedTemplate, formData);
