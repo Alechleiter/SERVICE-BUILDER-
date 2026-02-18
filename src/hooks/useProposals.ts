@@ -175,10 +175,15 @@ export function useProposals() {
       // Save photos if we have a valid proposal ID
       if (proposalId && proposal.photos && proposal.photos.length > 0) {
         try {
+          console.log("[useProposals] Saving", proposal.photos.length, "photos for proposal", proposalId);
           await savePhotos(supabase, user.id, proposalId, proposal.photos);
+          console.log("[useProposals] Photos saved successfully");
         } catch (e) {
-          console.error("[useProposals] Photo save error:", e);
-          // Don't fail the whole save if photos fail — proposal data is already saved
+          const photoMsg = e instanceof Error ? e.message : String(e);
+          console.error("[useProposals] Photo save error:", photoMsg, e);
+          // Don't fail the whole save — proposal data is already saved
+          // But warn the user so they know photos didn't save
+          setSaveError(`Proposal saved but photos failed: ${photoMsg}`);
         }
       }
 
@@ -368,12 +373,14 @@ async function savePhotos(
   // Upload each photo
   for (let i = 0; i < photos.length; i++) {
     const photo = photos[i];
+    console.log(`[savePhotos] Processing photo ${i + 1}/${photos.length}, src starts with:`, photo.src.substring(0, 50));
+
     // If src is already a URL (loaded from Supabase), skip re-upload
     if (photo.src.startsWith("http")) {
       // Re-insert the DB row with the existing path
       const pathMatch = photo.src.match(/proposal-photos\/(.+)$/);
       if (pathMatch) {
-        await supabase.from("proposal_photos").insert({
+        const { error: reInsertErr } = await supabase.from("proposal_photos").insert({
           proposal_id: proposalId,
           storage_path: pathMatch[1],
           file_name: photo.fileName || `photo_${i + 1}.jpg`,
@@ -383,28 +390,34 @@ async function savePhotos(
           custom_zone: photo.customZone || "",
           sort_order: i,
         });
+        if (reInsertErr) console.error("[savePhotos] Re-insert DB row failed:", reInsertErr.message);
       }
       continue;
     }
 
     // Convert base64 to File and upload
     const file = dataUrlToFile(photo.src, photo.fileName || `photo_${i + 1}.jpg`);
-    if (!file) continue;
+    if (!file) {
+      console.error(`[savePhotos] Failed to convert photo ${i + 1} from base64 to File`);
+      continue;
+    }
+    console.log(`[savePhotos] Uploading photo ${i + 1}: ${file.name}, size: ${file.size} bytes`);
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const storagePath = `${userId}/${proposalId}/${Date.now()}_${i}_${safeName}`;
 
-    const { error } = await supabase.storage
+    const { error: uploadErr } = await supabase.storage
       .from("proposal-photos")
       .upload(storagePath, file, { cacheControl: "3600", upsert: false });
 
-    if (error) {
-      console.error("Photo upload failed:", error.message);
+    if (uploadErr) {
+      console.error(`[savePhotos] Storage upload failed for photo ${i + 1}:`, uploadErr.message);
       continue;
     }
+    console.log(`[savePhotos] Upload success, path: ${storagePath}`);
 
     // Insert row into proposal_photos
-    await supabase.from("proposal_photos").insert({
+    const { error: dbErr } = await supabase.from("proposal_photos").insert({
       proposal_id: proposalId,
       storage_path: storagePath,
       file_name: photo.fileName || `photo_${i + 1}.jpg`,
@@ -414,5 +427,10 @@ async function savePhotos(
       custom_zone: photo.customZone || "",
       sort_order: i,
     });
+    if (dbErr) {
+      console.error(`[savePhotos] DB insert failed for photo ${i + 1}:`, dbErr.message);
+    } else {
+      console.log(`[savePhotos] DB row inserted for photo ${i + 1}`);
+    }
   }
 }
