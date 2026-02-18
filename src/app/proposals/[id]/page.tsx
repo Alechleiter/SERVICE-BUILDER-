@@ -144,15 +144,19 @@ export default function SavedProposalPage() {
   const handleSave = useCallback(async () => {
     if (!selectedTemplate) return;
     setSaving(true);
-    await save({
-      id: proposalId,
-      templateId: selectedTemplate,
-      name: proposalName || undefined,
-      formData,
-      inspectionDate: inspectionDate || undefined,
-      clientId: selectedClientId || undefined,
-    });
-    clearDraft(); // Clear auto-save since it's now in Supabase
+    try {
+      await save({
+        id: proposalId,
+        templateId: selectedTemplate,
+        name: proposalName || undefined,
+        formData,
+        inspectionDate: inspectionDate || undefined,
+        clientId: selectedClientId || undefined,
+      });
+      clearDraft(); // Only clear auto-save AFTER confirmed save
+    } catch {
+      // Save failed — keep the auto-save draft as backup
+    }
     setSaving(false);
   }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, save, clearDraft]);
 

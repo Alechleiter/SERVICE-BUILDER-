@@ -129,8 +129,10 @@ export default function ProposalGeneratorPage() {
       clientId: selectedClientId || undefined,
     });
     setSaving(false);
-    clearDraftOnSave(); // Clear auto-save since it's now in Supabase
-    if (id) router.push(`/proposals/${id}`);
+    if (id) {
+      clearDraftOnSave(); // Only clear auto-save AFTER confirmed save
+      router.push(`/proposals/${id}`);
+    }
   }, [selectedTemplate, formData, inspectionDate, selectedClientId, saveProposal, router, clearDraftOnSave]);
 
   const handleTemplateSelect = (key: TemplateId) => {

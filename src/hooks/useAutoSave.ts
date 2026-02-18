@@ -5,9 +5,8 @@ import { useEffect, useRef, useCallback } from "react";
  * Auto-save hook: debounced save to localStorage.
  *
  * - Saves `data` under `storageKey` after `delay` ms of inactivity
+ * - **Flushes immediately on unmount / tab close** so no data is ever lost
  * - Returns { clear, restore } helpers
- * - `clear()` removes the saved draft
- * - `restore()` returns the saved draft (or null)
  */
 export interface AutoSaveData {
   templateId: string;
@@ -15,12 +14,19 @@ export interface AutoSaveData {
   inspectionDate: string;
   selectedClientId?: string;
   proposalName?: string;
-  // Photos & mapData are complex objects — we save metadata only
   photoCount?: number;
   savedAt: number; // timestamp
 }
 
 const STORAGE_PREFIX = "sb-autosave-";
+
+function writeToStorage(key: string, data: AutoSaveData): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(data));
+  } catch {
+    /* localStorage full or unavailable — ignore */
+  }
+}
 
 export function useAutoSave(
   storageKey: string,
@@ -30,23 +36,58 @@ export function useAutoSave(
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fullKey = STORAGE_PREFIX + storageKey;
 
-  // Debounced save
+  // Keep a ref to the latest data so we can flush it on unmount
+  const latestDataRef = useRef<AutoSaveData | null>(data);
+  latestDataRef.current = data;
+
+  const fullKeyRef = useRef(fullKey);
+  fullKeyRef.current = fullKey;
+
+  // Debounced save — writes after `delay` ms of inactivity
   useEffect(() => {
     if (!data) return;
 
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      try {
-        window.localStorage.setItem(fullKey, JSON.stringify(data));
-      } catch {
-        /* localStorage full or unavailable — ignore */
-      }
+      writeToStorage(fullKey, data);
+      timerRef.current = null;
     }, delay);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [data, fullKey, delay]);
+
+  // Flush on unmount — if there's pending data, write it NOW
+  useEffect(() => {
+    return () => {
+      if (latestDataRef.current) {
+        writeToStorage(fullKeyRef.current, latestDataRef.current);
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Also flush on tab close / before-unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (latestDataRef.current) {
+        writeToStorage(fullKeyRef.current, latestDataRef.current);
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
+  // Also flush on visibility change (user switches tabs / minimizes)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden" && latestDataRef.current) {
+        writeToStorage(fullKeyRef.current, latestDataRef.current);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   // Clear saved draft
   const clear = useCallback(() => {
