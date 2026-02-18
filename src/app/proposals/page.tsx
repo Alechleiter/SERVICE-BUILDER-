@@ -57,7 +57,7 @@ export default function ProposalGeneratorPage() {
     if (current) setIsDark(current === "dark");
   }, []);
 
-  // ── Auto-save to localStorage ──
+  // ── Auto-save to IndexedDB (includes photos + map) ──
   const autoSaveData = useMemo<AutoSaveData | null>(() => {
     if (!selectedTemplate || Object.keys(formData).length === 0) return null;
     return {
@@ -65,20 +65,22 @@ export default function ProposalGeneratorPage() {
       formData,
       inspectionDate,
       selectedClientId: selectedClientId || undefined,
-      photoCount: photos.length,
+      photos,
+      mapData,
       savedAt: Date.now(),
     };
-  }, [selectedTemplate, formData, inspectionDate, selectedClientId, photos.length]);
+  }, [selectedTemplate, formData, inspectionDate, selectedClientId, photos, mapData]);
 
   const { clear: clearDraft, restore: restoreDraft } = useAutoSave("new-proposal", autoSaveData);
 
-  // Check for a saved draft on mount
+  // Check for a saved draft on mount (async)
   useEffect(() => {
-    const draft = restoreDraft();
-    if (draft && draft.templateId && Object.keys(draft.formData).length > 0) {
-      setRestoredDraft(draft);
-      setShowRestore(true);
-    }
+    restoreDraft().then((draft) => {
+      if (draft && draft.templateId && Object.keys(draft.formData).length > 0) {
+        setRestoredDraft(draft);
+        setShowRestore(true);
+      }
+    });
   }, [restoreDraft]);
 
   const handleRestoreDraft = useCallback(() => {
@@ -87,6 +89,8 @@ export default function ProposalGeneratorPage() {
     setFormData(restoredDraft.formData);
     setInspectionDate(restoredDraft.inspectionDate || "");
     if (restoredDraft.selectedClientId) setSelectedClientId(restoredDraft.selectedClientId);
+    if (restoredDraft.photos?.length) setPhotos(restoredDraft.photos);
+    if (restoredDraft.mapData) setMapData(restoredDraft.mapData);
     setShowRestore(false);
     setRestoredDraft(null);
   }, [restoredDraft]);
@@ -347,7 +351,10 @@ export default function ProposalGeneratorPage() {
                   Unsaved draft found
                 </div>
                 <div style={{ fontSize: 11, color: "var(--text4)", marginTop: 2 }}>
-                  {TEMPLATES[restoredDraft.templateId as TemplateId]?.name ?? "Proposal"} — saved {new Date(restoredDraft.savedAt).toLocaleString()}
+                  {TEMPLATES[restoredDraft.templateId as TemplateId]?.name ?? "Proposal"}
+                  {restoredDraft.photos?.length ? ` · ${restoredDraft.photos.length} photo${restoredDraft.photos.length > 1 ? "s" : ""}` : ""}
+                  {restoredDraft.mapData ? " · map" : ""}
+                  {" — "}{new Date(restoredDraft.savedAt).toLocaleString()}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8 }}>

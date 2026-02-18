@@ -62,7 +62,7 @@ export default function SavedProposalPage() {
     if (current) setIsDark(current === "dark");
   }, []);
 
-  // ── Auto-save to localStorage (keyed by proposal ID) ──
+  // ── Auto-save to IndexedDB (keyed by proposal ID, includes photos + map) ──
   const autoSaveData = useMemo<AutoSaveData | null>(() => {
     if (!selectedTemplate || Object.keys(formData).length === 0) return null;
     return {
@@ -71,32 +71,34 @@ export default function SavedProposalPage() {
       inspectionDate,
       selectedClientId: selectedClientId || undefined,
       proposalName: proposalName || undefined,
-      photoCount: photos.length,
+      photos,
+      mapData,
       savedAt: Date.now(),
     };
-  }, [selectedTemplate, formData, inspectionDate, selectedClientId, proposalName, photos.length]);
+  }, [selectedTemplate, formData, inspectionDate, selectedClientId, proposalName, photos, mapData]);
 
   const { clear: clearDraft, restore: restoreDraft } = useAutoSave(`proposal-${proposalId}`, autoSaveData);
 
-  // After loading from Supabase, check if localStorage has newer data
+  // After loading from Supabase, check if IndexedDB has newer data
   const dbLoadedRef = useRef(false);
   useEffect(() => {
     if (loadingProposal || !selectedTemplate || dbLoadedRef.current) return;
     dbLoadedRef.current = true;
-    const draft = restoreDraft();
-    if (draft && draft.formData && Object.keys(draft.formData).length > 0) {
-      // Compare: does the draft have more data than what's in the DB?
-      const dbFieldCount = Object.keys(formData).filter(k => formData[k]?.trim()).length;
-      const draftFieldCount = Object.keys(draft.formData).filter(k => draft.formData[k]?.trim()).length;
-      if (draftFieldCount > dbFieldCount) {
-        setRestoredDraft(draft);
-        setShowRestore(true);
-      } else {
-        // Draft is same or older — clear it
-        clearDraft();
+    restoreDraft().then((draft) => {
+      if (draft && draft.formData && Object.keys(draft.formData).length > 0) {
+        // Compare: does the draft have more data than what's in the DB?
+        const dbFieldCount = Object.keys(formData).filter(k => formData[k]?.trim()).length;
+        const draftFieldCount = Object.keys(draft.formData).filter(k => draft.formData[k]?.trim()).length;
+        const draftHasPhotos = (draft.photos?.length ?? 0) > photos.length;
+        if (draftFieldCount > dbFieldCount || draftHasPhotos) {
+          setRestoredDraft(draft);
+          setShowRestore(true);
+        } else {
+          clearDraft();
+        }
       }
-    }
-  }, [loadingProposal, selectedTemplate, formData, restoreDraft, clearDraft]);
+    });
+  }, [loadingProposal, selectedTemplate, formData, photos.length, restoreDraft, clearDraft]);
 
   const handleRestoreDraft = useCallback(() => {
     if (!restoredDraft) return;
@@ -104,6 +106,8 @@ export default function SavedProposalPage() {
     if (restoredDraft.inspectionDate) setInspectionDate(restoredDraft.inspectionDate);
     if (restoredDraft.selectedClientId) setSelectedClientId(restoredDraft.selectedClientId);
     if (restoredDraft.proposalName) setProposalName(restoredDraft.proposalName);
+    if (restoredDraft.photos?.length) setPhotos(restoredDraft.photos);
+    if (restoredDraft.mapData) setMapData(restoredDraft.mapData);
     setShowRestore(false);
     setRestoredDraft(null);
   }, [restoredDraft]);
@@ -478,6 +482,8 @@ export default function SavedProposalPage() {
               </div>
               <div style={{ fontSize: 11, color: "var(--text4)", marginTop: 1 }}>
                 Auto-saved {new Date(restoredDraft.savedAt).toLocaleString()}
+                {restoredDraft.photos?.length ? ` · ${restoredDraft.photos.length} photo${restoredDraft.photos.length > 1 ? "s" : ""}` : ""}
+                {restoredDraft.mapData ? " · map" : ""}
               </div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>

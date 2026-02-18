@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useRef, useCallback } from "react";
+import type { PhotoEntry, MapData } from "@/lib/proposals/types";
 
 /**
- * Auto-save hook: debounced save to localStorage.
+ * Auto-save hook using IndexedDB for full proposal data (photos, map, form).
  *
- * - Saves `data` under `storageKey` after `delay` ms of inactivity
- * - **Flushes immediately on unmount / tab close** so no data is ever lost
- * - Returns { clear, restore } helpers
+ * - Debounced save every `delay` ms
+ * - Flushes immediately on unmount / tab close / visibility change
+ * - Uses IndexedDB (not localStorage) so photos & map images don't hit the 5MB limit
  */
 export interface AutoSaveData {
   templateId: string;
@@ -14,17 +15,79 @@ export interface AutoSaveData {
   inspectionDate: string;
   selectedClientId?: string;
   proposalName?: string;
-  photoCount?: number;
-  savedAt: number; // timestamp
+  photos: PhotoEntry[];
+  mapData: MapData | null;
+  savedAt: number;
 }
 
-const STORAGE_PREFIX = "sb-autosave-";
+const DB_NAME = "sb-autosave";
+const DB_VERSION = 1;
+const STORE_NAME = "drafts";
 
-function writeToStorage(key: string, data: AutoSaveData): void {
+// ── IndexedDB helpers (sync-friendly) ──
+
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function writeToDB(key: string, data: AutoSaveData): Promise<void> {
   try {
-    window.localStorage.setItem(key, JSON.stringify(data));
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).put(data, key);
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
   } catch {
-    /* localStorage full or unavailable — ignore */
+    /* IndexedDB unavailable — ignore */
+  }
+}
+
+async function readFromDB(key: string): Promise<AutoSaveData | null> {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const req = tx.objectStore(STORE_NAME).get(key);
+    const result = await new Promise<AutoSaveData | null>((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    if (result && Date.now() - result.savedAt > 7 * 24 * 60 * 60 * 1000) {
+      // Expired — clean up
+      deleteFromDB(key);
+      return null;
+    }
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+async function deleteFromDB(key: string): Promise<void> {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).delete(key);
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch {
+    /* ignore */
   }
 }
 
@@ -34,86 +97,70 @@ export function useAutoSave(
   delay = 2000,
 ) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fullKey = STORAGE_PREFIX + storageKey;
 
-  // Keep a ref to the latest data so we can flush it on unmount
+  // Keep refs so we can flush the latest data on unmount
   const latestDataRef = useRef<AutoSaveData | null>(data);
   latestDataRef.current = data;
 
-  const fullKeyRef = useRef(fullKey);
-  fullKeyRef.current = fullKey;
+  const keyRef = useRef(storageKey);
+  keyRef.current = storageKey;
 
-  // Debounced save — writes after `delay` ms of inactivity
+  // Debounced save
   useEffect(() => {
     if (!data) return;
 
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      writeToStorage(fullKey, data);
+      writeToDB(storageKey, data);
       timerRef.current = null;
     }, delay);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [data, fullKey, delay]);
+  }, [data, storageKey, delay]);
 
-  // Flush on unmount — if there's pending data, write it NOW
+  // Flush on unmount
   useEffect(() => {
     return () => {
       if (latestDataRef.current) {
-        writeToStorage(fullKeyRef.current, latestDataRef.current);
+        // Fire-and-forget — component is unmounting
+        writeToDB(keyRef.current, latestDataRef.current);
       }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Also flush on tab close / before-unload
+  // Flush on tab close
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const handler = () => {
       if (latestDataRef.current) {
-        writeToStorage(fullKeyRef.current, latestDataRef.current);
+        writeToDB(keyRef.current, latestDataRef.current);
       }
     };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
   }, []);
 
-  // Also flush on visibility change (user switches tabs / minimizes)
+  // Flush on visibility change (tab switch / minimize)
   useEffect(() => {
-    const handleVisibility = () => {
+    const handler = () => {
       if (document.visibilityState === "hidden" && latestDataRef.current) {
-        writeToStorage(fullKeyRef.current, latestDataRef.current);
+        writeToDB(keyRef.current, latestDataRef.current);
       }
     };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
   }, []);
 
-  // Clear saved draft
+  // Clear
   const clear = useCallback(() => {
-    try {
-      window.localStorage.removeItem(fullKey);
-    } catch {
-      /* ignore */
-    }
-  }, [fullKey]);
+    deleteFromDB(storageKey);
+  }, [storageKey]);
 
-  // Restore saved draft (synchronous)
-  const restore = useCallback((): AutoSaveData | null => {
-    try {
-      const raw = window.localStorage.getItem(fullKey);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as AutoSaveData;
-      // Expire drafts older than 7 days
-      if (Date.now() - parsed.savedAt > 7 * 24 * 60 * 60 * 1000) {
-        window.localStorage.removeItem(fullKey);
-        return null;
-      }
-      return parsed;
-    } catch {
-      return null;
-    }
-  }, [fullKey]);
+  // Restore (async — returns a promise)
+  const restore = useCallback((): Promise<AutoSaveData | null> => {
+    return readFromDB(storageKey);
+  }, [storageKey]);
 
   return { clear, restore };
 }
