@@ -32,7 +32,7 @@ const MONO = "'DM Mono',monospace";
 export default function ProposalGeneratorPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { list: listProposals, save: saveProposal, finalize: finalizeProposal } = useProposals();
+  const { list: listProposals, save: saveProposal, finalize: finalizeProposal, saveError } = useProposals();
   const { list: listClients } = useClients();
   const [isMobile, mobileRef] = useIsMobile(768);
 
@@ -124,57 +124,94 @@ export default function ProposalGeneratorPage() {
   }, [user, listProposals, listClients]);
 
   const handleSaveProposal = useCallback(async () => {
-    if (!selectedTemplate) return;
-    setSaving(true);
-    const name = formData.property_name || formData.restaurant_name || TEMPLATES[selectedTemplate].name;
-    const id = await saveProposal({
-      templateId: selectedTemplate,
-      name,
-      formData,
-      inspectionDate: inspectionDate || undefined,
-      clientId: selectedClientId || undefined,
-      mapData: mapData || undefined,
-      photos: photos.length > 0 ? photos : undefined,
-    });
-    setSaving(false);
-    if (id) {
-      clearDraftOnSave(); // Only clear auto-save AFTER confirmed save
-      router.push(`/proposals/${id}`);
+    if (!selectedTemplate) {
+      alert("No template selected. Please select a template first.");
+      return;
     }
-  }, [selectedTemplate, formData, inspectionDate, selectedClientId, mapData, photos, saveProposal, router, clearDraftOnSave]);
+    if (!user) {
+      alert("You must be signed in to save. Please log in.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const name = formData.property_name || formData.restaurant_name || TEMPLATES[selectedTemplate].name;
+      console.log("[SaveDraft] Starting save for:", name, "template:", selectedTemplate, "user:", user.id);
+      const id = await saveProposal({
+        templateId: selectedTemplate,
+        name,
+        formData,
+        inspectionDate: inspectionDate || undefined,
+        clientId: selectedClientId || undefined,
+        mapData: mapData || undefined,
+        photos: photos.length > 0 ? photos : undefined,
+      });
+      console.log("[SaveDraft] Save returned id:", id);
+      if (id) {
+        clearDraftOnSave(); // Only clear auto-save AFTER confirmed save
+        router.push(`/proposals/${id}`);
+      } else {
+        alert("Save failed — check the red error banner below the toolbar. Your data is safe in auto-save.");
+      }
+    } catch (err) {
+      console.error("[ProposalPage] Save error:", err);
+      alert("Save failed unexpectedly. Your data is safe in auto-save.\n\nError: " + (err instanceof Error ? err.message : String(err)));
+    }
+    setSaving(false);
+  }, [selectedTemplate, formData, inspectionDate, selectedClientId, mapData, photos, saveProposal, router, clearDraftOnSave, user]);
 
   const handleSaveAndFinalize = useCallback(async () => {
-    if (!selectedTemplate) return;
+    if (!selectedTemplate) {
+      alert("No template selected. Please select a template first.");
+      return;
+    }
+    if (!user) {
+      alert("You must be signed in to save. Please log in.");
+      return;
+    }
     setFinalizing(true);
-    const name = formData.property_name || formData.restaurant_name || TEMPLATES[selectedTemplate].name;
-    // 1. Save everything to Supabase first
-    const id = await saveProposal({
-      templateId: selectedTemplate,
-      name,
-      formData,
-      inspectionDate: inspectionDate || undefined,
-      clientId: selectedClientId || undefined,
-      mapData: mapData || undefined,
-      photos: photos.length > 0 ? photos : undefined,
-    });
-    if (id) {
-      // 2. Generate finalized HTML (Word-formatted for download)
-      const content = generateContent(selectedTemplate, formData);
-      const customerHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "customer");
-      const internalHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "internal");
-      const customerWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "customer", mapImageRef.current);
-      const internalWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "internal", mapImageRef.current);
-      // 3. Save snapshots + mark as "sent"
-      await finalizeProposal({ proposalId: id, customerHtml, internalHtml, formData });
-      // 4. Auto-download both Word docs so user has the finished reports
-      const fileName = name.replace(/[<>:"/\\|?*]/g, "").trim() || "Proposal";
-      exportWord(customerWordHtml, fileName);
-      exportWord(internalWordHtml, `${fileName}_Internal`);
-      clearDraftOnSave();
-      router.push(`/proposals/${id}`);
+    try {
+      const name = formData.property_name || formData.restaurant_name || TEMPLATES[selectedTemplate].name;
+      console.log("[Save&Finalize] Starting save for:", name, "template:", selectedTemplate, "user:", user.id);
+      // 1. Save everything to Supabase first
+      const id = await saveProposal({
+        templateId: selectedTemplate,
+        name,
+        formData,
+        inspectionDate: inspectionDate || undefined,
+        clientId: selectedClientId || undefined,
+        mapData: mapData || undefined,
+        photos: photos.length > 0 ? photos : undefined,
+      });
+      console.log("[Save&Finalize] Save returned id:", id);
+      if (id) {
+        // 2. Generate finalized HTML (Word-formatted for download)
+        const content = generateContent(selectedTemplate, formData);
+        const customerHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "customer");
+        const internalHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "internal");
+        const customerWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "customer", mapImageRef.current);
+        const internalWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "internal", mapImageRef.current);
+        // 3. Save snapshots + mark as "sent"
+        const version = await finalizeProposal({ proposalId: id, customerHtml, internalHtml, formData });
+        console.log("[Save&Finalize] Finalize returned version:", version);
+        if (version) {
+          // 4. Auto-download both Word docs so user has the finished reports
+          const fileName = name.replace(/[<>:"/\\|?*]/g, "").trim() || "Proposal";
+          exportWord(customerWordHtml, fileName);
+          exportWord(internalWordHtml, `${fileName}_Internal`);
+          clearDraftOnSave();
+          router.push(`/proposals/${id}`);
+        } else {
+          alert("Finalize failed — the proposal was saved but the finalized version could not be created. Check the error banner below the toolbar.");
+        }
+      } else {
+        alert("Save failed — could not save proposal to database. Check the red error banner below the toolbar. Your data is safe in auto-save.");
+      }
+    } catch (err) {
+      console.error("[ProposalPage] Save & Finalize error:", err);
+      alert("Save & Finalize failed unexpectedly. Your data is safe in auto-save.\n\nError: " + (err instanceof Error ? err.message : String(err)));
     }
     setFinalizing(false);
-  }, [selectedTemplate, formData, inspectionDate, selectedClientId, mapData, photos, saveProposal, finalizeProposal, router, clearDraftOnSave]);
+  }, [selectedTemplate, formData, inspectionDate, selectedClientId, mapData, photos, saveProposal, finalizeProposal, router, clearDraftOnSave, user]);
 
   const handleTemplateSelect = (key: TemplateId) => {
     setSelectedTemplate(key);
@@ -565,6 +602,25 @@ export default function ProposalGeneratorPage() {
           />
         </div>
       </div>
+
+      {/* Save Error Banner */}
+      {saveError && (
+        <div style={{
+          maxWidth: 1400, margin: "0 auto", padding: isMobile ? "8px 12px" : "8px 20px",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10, padding: "12px 16px",
+            background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)",
+            borderRadius: 10, flexWrap: "wrap",
+          }}>
+            <span style={{ fontSize: 18 }}>{"\u26A0\uFE0F"}</span>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: "#DC2626" }}>Save Error</div>
+              <div style={{ fontSize: 12, color: "var(--text)", marginTop: 2, wordBreak: "break-word" }}>{saveError}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div style={{ display: "flex", maxWidth: isMobile ? "100%" : 1400, margin: "0 auto", minHeight: "calc(100vh - 106px)", overflowX: "hidden" }}>

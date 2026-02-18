@@ -35,17 +35,21 @@ export function useProposals() {
   const { user } = useAuth();
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const list = useCallback(async () => {
     if (!user) return [];
     setLoading(true);
     try {
       const supabase = createClient();
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("proposals")
         .select("id, name, template_id, status, updated_at, client_id")
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false });
+      if (error) {
+        console.error("[useProposals] list error:", error.message, error.details, error.hint);
+      }
       const items = (data ?? []) as ProposalListItem[];
       setProposals(items);
       return items;
@@ -67,15 +71,35 @@ export function useProposals() {
       mapData?: MapData | null;
       photos?: PhotoEntry[];
     }): Promise<string | null> => {
-      if (!user) return null;
+      if (!user) {
+        const msg = "Save failed: not logged in. Please sign in and try again.";
+        console.error("[useProposals]", msg);
+        setSaveError(msg);
+        return null;
+      }
+      setSaveError(null);
       const supabase = createClient();
 
-      // Serialize mapData for DB (strip imageSrc if it's huge base64 — store separately)
-      const mapDataForDb = proposal.mapData ? (proposal.mapData as unknown as Json) : null;
+      // Serialize mapData for DB — strip imageSrc to avoid bloated JSON
+      let mapDataForDb: Json | null = null;
+      if (proposal.mapData) {
+        try {
+          // Deep-clone and strip imageSrc (can be huge base64)
+          const cleaned = JSON.parse(JSON.stringify(proposal.mapData));
+          if (cleaned.imageSrc && cleaned.imageSrc.length > 500) {
+            // Keep a short marker so we know there was an image, but don't store megabytes
+            cleaned.imageSrc = cleaned.imageSrc.substring(0, 200);
+          }
+          mapDataForDb = cleaned as Json;
+        } catch {
+          mapDataForDb = proposal.mapData as unknown as Json;
+        }
+      }
 
       let proposalId: string | null = null;
 
       if (proposal.id) {
+        // ── UPDATE existing proposal ──
         const update: ProposalUpdate = {
           template_id: proposal.templateId,
           name: proposal.name ?? null,
@@ -86,9 +110,16 @@ export function useProposals() {
           client_id: proposal.clientId ?? null,
           session_id: proposal.sessionId ?? null,
         };
-        await supabase.from("proposals").update(update).eq("id", proposal.id);
+        const { error } = await supabase.from("proposals").update(update).eq("id", proposal.id);
+        if (error) {
+          const msg = `Save failed (update): ${error.message}${error.details ? " — " + error.details : ""}${error.hint ? " — Hint: " + error.hint : ""}`;
+          console.error("[useProposals]", msg, error);
+          setSaveError(msg);
+          return null;
+        }
         proposalId = proposal.id;
       } else {
+        // ── INSERT new proposal ──
         const insert: ProposalInsert = {
           user_id: user.id,
           template_id: proposal.templateId,
@@ -100,19 +131,37 @@ export function useProposals() {
           client_id: proposal.clientId ?? null,
           session_id: proposal.sessionId ?? null,
         };
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("proposals")
           .insert(insert)
           .select("id")
           .single();
+        if (error) {
+          const msg = `Save failed (insert): ${error.message}${error.details ? " — " + error.details : ""}${error.hint ? " — Hint: " + error.hint : ""}`;
+          console.error("[useProposals]", msg, error);
+          setSaveError(msg);
+          return null;
+        }
         proposalId = data?.id ?? null;
+        if (!proposalId) {
+          const msg = "Save failed: no proposal ID returned from insert.";
+          console.error("[useProposals]", msg);
+          setSaveError(msg);
+          return null;
+        }
       }
 
       // Save photos if we have a valid proposal ID
       if (proposalId && proposal.photos && proposal.photos.length > 0) {
-        await savePhotos(supabase, user.id, proposalId, proposal.photos);
+        try {
+          await savePhotos(supabase, user.id, proposalId, proposal.photos);
+        } catch (e) {
+          console.error("[useProposals] Photo save error:", e);
+          // Don't fail the whole save if photos fail — proposal data is already saved
+        }
       }
 
+      console.log("[useProposals] Save successful, proposalId:", proposalId);
       return proposalId;
     },
     [user],
@@ -128,6 +177,13 @@ export function useProposals() {
         supabase.from("proposals").select("*").eq("id", id).single(),
         supabase.from("proposal_photos").select("*").eq("proposal_id", id).order("sort_order"),
       ]);
+
+      if (proposalResult.error) {
+        console.error("[useProposals] load proposal error:", proposalResult.error.message);
+      }
+      if (photosResult.error) {
+        console.error("[useProposals] load photos error:", photosResult.error.message);
+      }
 
       const proposal = proposalResult.data as Proposal | null;
       if (!proposal) return null;
@@ -168,7 +224,10 @@ export function useProposals() {
         await supabase.storage.from("proposal-photos").remove(paths);
         await supabase.from("proposal_photos").delete().eq("proposal_id", id);
       }
-      await supabase.from("proposals").delete().eq("id", id);
+      const { error } = await supabase.from("proposals").delete().eq("id", id);
+      if (error) {
+        console.error("[useProposals] delete error:", error.message);
+      }
     },
     [user],
   );
@@ -177,7 +236,10 @@ export function useProposals() {
     async (id: string, status: "draft" | "sent" | "accepted" | "declined") => {
       if (!user) return;
       const supabase = createClient();
-      await supabase.from("proposals").update({ status }).eq("id", id);
+      const { error } = await supabase.from("proposals").update({ status }).eq("id", id);
+      if (error) {
+        console.error("[useProposals] updateStatus error:", error.message);
+      }
     },
     [user],
   );
@@ -194,12 +256,16 @@ export function useProposals() {
       const supabase = createClient();
 
       // Determine next version number
-      const { data: existing } = await supabase
+      const { data: existing, error: versionError } = await supabase
         .from("proposal_snapshots")
         .select("version_number")
         .eq("proposal_id", params.proposalId)
         .order("version_number", { ascending: false })
         .limit(1);
+
+      if (versionError) {
+        console.error("[useProposals] finalize version query error:", versionError.message);
+      }
 
       const nextVersion = existing && existing.length > 0
         ? (existing[0] as { version_number: number }).version_number + 1
@@ -225,20 +291,29 @@ export function useProposals() {
         },
       ];
 
-      await supabase.from("proposal_snapshots").insert(snapshots);
+      const { error: snapError } = await supabase.from("proposal_snapshots").insert(snapshots);
+      if (snapError) {
+        const msg = `Finalize failed (snapshots): ${snapError.message}`;
+        console.error("[useProposals]", msg, snapError);
+        setSaveError(msg);
+        return null;
+      }
 
       // Update proposal status to "sent"
-      await supabase
+      const { error: statusError } = await supabase
         .from("proposals")
         .update({ status: "sent" })
         .eq("id", params.proposalId);
+      if (statusError) {
+        console.error("[useProposals] finalize status update error:", statusError.message);
+      }
 
       return nextVersion;
     },
     [user],
   );
 
-  return { proposals, loading, list, save, load, remove, updateStatus, finalize };
+  return { proposals, loading, saveError, list, save, load, remove, updateStatus, finalize };
 }
 
 // ── Internal helpers ──

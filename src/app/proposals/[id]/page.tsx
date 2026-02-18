@@ -32,7 +32,7 @@ export default function SavedProposalPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
-  const { load, save, finalize } = useProposals();
+  const { load, save, finalize, saveError } = useProposals();
   const { list: listClients } = useClients();
   const [isMobile, mobileRef] = useIsMobile(768);
 
@@ -150,10 +150,18 @@ export default function SavedProposalPage() {
   }, [user, proposalId, load, listClients]);
 
   const handleSave = useCallback(async () => {
-    if (!selectedTemplate) return;
+    if (!selectedTemplate) {
+      alert("No template selected.");
+      return;
+    }
+    if (!user) {
+      alert("You must be signed in to save. Please log in.");
+      return;
+    }
     setSaving(true);
     try {
-      await save({
+      console.log("[SavedPage:Save] Starting save for proposalId:", proposalId, "user:", user.id);
+      const result = await save({
         id: proposalId,
         templateId: selectedTemplate,
         name: proposalName || undefined,
@@ -163,45 +171,76 @@ export default function SavedProposalPage() {
         mapData: mapData || undefined,
         photos: photos.length > 0 ? photos : undefined,
       });
-      clearDraft(); // Only clear auto-save AFTER confirmed save
-    } catch {
-      // Save failed — keep the auto-save draft as backup
+      console.log("[SavedPage:Save] Save result:", result);
+      if (result) {
+        clearDraft(); // Only clear auto-save AFTER confirmed save
+        alert("Saved successfully!");
+      } else {
+        alert("Save failed — check the red error banner below the toolbar. Your data is safe in auto-save.");
+      }
+    } catch (err) {
+      console.error("[SavedProposalPage] Save error:", err);
+      alert("Save failed unexpectedly. Your data is safe in auto-save.\n\nError: " + (err instanceof Error ? err.message : String(err)));
     }
     setSaving(false);
-  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, mapData, photos, save, clearDraft]);
+  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, mapData, photos, save, clearDraft, user]);
 
   const handleFinalize = useCallback(async () => {
-    if (!selectedTemplate) return;
+    if (!selectedTemplate) {
+      alert("No template selected.");
+      return;
+    }
+    if (!user) {
+      alert("You must be signed in to finalize. Please log in.");
+      return;
+    }
     setFinalizing(true);
-    // First save current state
-    await save({
-      id: proposalId,
-      templateId: selectedTemplate,
-      name: proposalName || undefined,
-      formData,
-      inspectionDate: inspectionDate || undefined,
-      clientId: selectedClientId || undefined,
-      mapData: mapData || undefined,
-      photos: photos.length > 0 ? photos : undefined,
-    });
-    // Generate both versions
-    const content = generateContent(selectedTemplate, formData);
-    const customerHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "customer");
-    const internalHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "internal");
-    const customerWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "customer", mapImageRef.current);
-    const internalWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "internal", mapImageRef.current);
-    // Save snapshots
-    const version = await finalize({ proposalId, customerHtml, internalHtml, formData });
-    // Auto-download both Word docs
-    const fileName = (formData.property_name || formData.restaurant_name || proposalName || "Proposal").replace(/[<>:"/\\|?*]/g, "").trim();
-    exportWord(customerWordHtml, fileName);
-    exportWord(internalWordHtml, `${fileName}_Internal`);
-    setFinalizedVersion(version);
-    clearDraft();
+    try {
+      console.log("[SavedPage:Finalize] Starting for proposalId:", proposalId, "user:", user.id);
+      // First save current state
+      const saveResult = await save({
+        id: proposalId,
+        templateId: selectedTemplate,
+        name: proposalName || undefined,
+        formData,
+        inspectionDate: inspectionDate || undefined,
+        clientId: selectedClientId || undefined,
+        mapData: mapData || undefined,
+        photos: photos.length > 0 ? photos : undefined,
+      });
+      console.log("[SavedPage:Finalize] Save result:", saveResult);
+      if (!saveResult) {
+        alert("Finalize failed — could not save proposal data. Check the red error banner below the toolbar.");
+        setFinalizing(false);
+        return;
+      }
+      // Generate both versions
+      const content = generateContent(selectedTemplate, formData);
+      const customerHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "customer");
+      const internalHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "internal");
+      const customerWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "customer", mapImageRef.current);
+      const internalWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "internal", mapImageRef.current);
+      // Save snapshots
+      const version = await finalize({ proposalId, customerHtml, internalHtml, formData });
+      console.log("[SavedPage:Finalize] Finalize returned version:", version);
+      if (version) {
+        // Auto-download both Word docs
+        const fileName = (formData.property_name || formData.restaurant_name || proposalName || "Proposal").replace(/[<>:"/\\|?*]/g, "").trim();
+        exportWord(customerWordHtml, fileName);
+        exportWord(internalWordHtml, `${fileName}_Internal`);
+        setFinalizedVersion(version);
+        clearDraft();
+        // Clear notification after 3 seconds
+        setTimeout(() => setFinalizedVersion(null), 3000);
+      } else {
+        alert("Finalize failed — the proposal was saved but the finalized report could not be created. Check the red error banner below.");
+      }
+    } catch (err) {
+      console.error("[SavedProposalPage] Finalize error:", err);
+      alert("Finalize failed unexpectedly. Your data is safe in auto-save.\n\nError: " + (err instanceof Error ? err.message : String(err)));
+    }
     setFinalizing(false);
-    // Clear notification after 3 seconds
-    setTimeout(() => setFinalizedVersion(null), 3000);
-  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, photos, mapData, save, finalize, clearDraft]);
+  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, photos, mapData, save, finalize, clearDraft, user]);
 
   const handleFieldChange = useCallback((key: string, value: string) => {
     setFormData((p) => ({ ...p, [key]: value }));
@@ -516,6 +555,25 @@ export default function SavedProposalPage() {
               }}>
                 Keep DB version
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Error Banner */}
+      {saveError && (
+        <div style={{
+          maxWidth: 1400, margin: "0 auto", padding: isMobile ? "8px 12px" : "8px 20px",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10, padding: "12px 16px",
+            background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)",
+            borderRadius: 10, flexWrap: "wrap",
+          }}>
+            <span style={{ fontSize: 18 }}>{"\u26A0\uFE0F"}</span>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: "#DC2626" }}>Save Error</div>
+              <div style={{ fontSize: 12, color: "var(--text)", marginTop: 2, wordBreak: "break-word" }}>{saveError}</div>
             </div>
           </div>
         </div>
