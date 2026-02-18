@@ -2,7 +2,7 @@
 import { useState, useCallback } from "react";
 import { useAuth } from "./useAuth";
 import { createClient } from "@/lib/supabase/client";
-import type { Proposal, ProposalInsert, ProposalUpdate, ProposalSnapshotInsert, ProposalPhoto } from "@/lib/supabase/database.types";
+import type { Proposal, ProposalInsert, ProposalUpdate, ProposalSnapshotInsert } from "@/lib/supabase/database.types";
 import type { PhotoEntry, MapData } from "@/lib/proposals/types";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -14,6 +14,14 @@ export interface ProposalListItem {
   updated_at: string;
   client_id: string | null;
 }
+
+/**
+ * Key used inside form_data to store serialized photos JSON.
+ * Photos are stored as a JSON string inside form_data so we don't need
+ * any new database columns or Supabase Storage buckets.
+ */
+const PHOTOS_KEY = "__photos_json";
+const MAP_KEY = "__map_data_json";
 
 export function useProposals() {
   const { user } = useAuth();
@@ -64,19 +72,30 @@ export function useProposals() {
       setSaveError(null);
       const supabase = createClient();
 
-      // Serialize mapData for DB — strip imageSrc to avoid bloated JSON
-      let mapDataForDb: Json | null = null;
+      // ── Embed photos + mapData directly into form_data as JSON strings ──
+      // This avoids needing any extra DB columns or Supabase Storage
+      const formDataForDb: Record<string, string> = { ...proposal.formData };
+
+      // Store photos as JSON inside form_data
+      if (proposal.photos && proposal.photos.length > 0) {
+        try {
+          formDataForDb[PHOTOS_KEY] = JSON.stringify(proposal.photos);
+          console.log("[useProposals] Embedded", proposal.photos.length, "photos in form_data, total JSON length:", formDataForDb[PHOTOS_KEY].length);
+        } catch (e) {
+          console.error("[useProposals] Failed to serialize photos:", e);
+        }
+      }
+
+      // Store mapData as JSON inside form_data (stripped of huge imageSrc)
       if (proposal.mapData) {
         try {
-          // Deep-clone and strip imageSrc (can be huge base64)
           const cleaned = JSON.parse(JSON.stringify(proposal.mapData));
           if (cleaned.imageSrc && cleaned.imageSrc.length > 500) {
-            // Keep a short marker so we know there was an image, but don't store megabytes
             cleaned.imageSrc = cleaned.imageSrc.substring(0, 200);
           }
-          mapDataForDb = cleaned as Json;
-        } catch {
-          mapDataForDb = proposal.mapData as unknown as Json;
+          formDataForDb[MAP_KEY] = JSON.stringify(cleaned);
+        } catch (e) {
+          console.error("[useProposals] Failed to serialize mapData:", e);
         }
       }
 
@@ -87,22 +106,13 @@ export function useProposals() {
         const update: ProposalUpdate = {
           template_id: proposal.templateId,
           name: proposal.name ?? null,
-          form_data: proposal.formData,
-          map_data: mapDataForDb,
+          form_data: formDataForDb as unknown as Json,
           inspection_date: proposal.inspectionDate ?? null,
           status: proposal.status ?? "draft",
           client_id: proposal.clientId ?? null,
           session_id: proposal.sessionId ?? null,
         };
-        let { error } = await supabase.from("proposals").update(update).eq("id", proposal.id);
-        // If map_data column doesn't exist yet, retry without it
-        if (error && error.message?.includes("map_data")) {
-          console.warn("[useProposals] map_data column not found, saving without it");
-          const { map_data: _removed, ...updateWithout } = update;
-          void _removed;
-          const retry = await supabase.from("proposals").update(updateWithout).eq("id", proposal.id);
-          error = retry.error;
-        }
+        const { error } = await supabase.from("proposals").update(update).eq("id", proposal.id);
         if (error) {
           const msg = `Save failed (update): ${error.message}${error.details ? " — " + error.details : ""}${error.hint ? " — Hint: " + error.hint : ""}`;
           console.error("[useProposals]", msg, error);
@@ -116,31 +126,17 @@ export function useProposals() {
           user_id: user.id,
           template_id: proposal.templateId,
           name: proposal.name ?? null,
-          form_data: proposal.formData,
-          map_data: mapDataForDb,
+          form_data: formDataForDb as unknown as Json,
           inspection_date: proposal.inspectionDate ?? null,
           status: proposal.status ?? "draft",
           client_id: proposal.clientId ?? null,
           session_id: proposal.sessionId ?? null,
         };
-        let { data, error } = await supabase
+        const { data, error } = await supabase
           .from("proposals")
           .insert(insert)
           .select("id")
           .single();
-        // If map_data column doesn't exist yet, retry without it
-        if (error && error.message?.includes("map_data")) {
-          console.warn("[useProposals] map_data column not found, saving without it");
-          const { map_data: _removed, ...insertWithout } = insert;
-          void _removed;
-          const retry = await supabase
-            .from("proposals")
-            .insert(insertWithout)
-            .select("id")
-            .single();
-          data = retry.data;
-          error = retry.error;
-        }
         if (error) {
           const msg = `Save failed (insert): ${error.message}${error.details ? " — " + error.details : ""}${error.hint ? " — Hint: " + error.hint : ""}`;
           console.error("[useProposals]", msg, error);
@@ -156,21 +152,6 @@ export function useProposals() {
         }
       }
 
-      // Save photos if we have a valid proposal ID
-      if (proposalId && proposal.photos && proposal.photos.length > 0) {
-        try {
-          console.log("[useProposals] Saving", proposal.photos.length, "photos for proposal", proposalId);
-          await savePhotos(supabase, proposalId, proposal.photos);
-          console.log("[useProposals] Photos saved successfully");
-        } catch (e) {
-          const photoMsg = e instanceof Error ? e.message : String(e);
-          console.error("[useProposals] Photo save error:", photoMsg, e);
-          // Don't fail the whole save — proposal data is already saved
-          // But warn the user so they know photos didn't save
-          setSaveError(`Proposal saved but photos failed: ${photoMsg}`);
-        }
-      }
-
       console.log("[useProposals] Save successful, proposalId:", proposalId);
       return proposalId;
     },
@@ -182,41 +163,55 @@ export function useProposals() {
       if (!user) return null;
       const supabase = createClient();
 
-      // Load proposal + photos in parallel
-      const [proposalResult, photosResult] = await Promise.all([
-        supabase.from("proposals").select("*").eq("id", id).single(),
-        supabase.from("proposal_photos").select("*").eq("proposal_id", id).order("sort_order"),
-      ]);
+      const { data, error } = await supabase
+        .from("proposals")
+        .select("*")
+        .eq("id", id)
+        .single();
 
-      if (proposalResult.error) {
-        console.error("[useProposals] load proposal error:", proposalResult.error.message);
+      if (error) {
+        console.error("[useProposals] load error:", error.message);
       }
-      if (photosResult.error) {
-        console.error("[useProposals] load photos error:", photosResult.error.message);
+      if (!data) return null;
+
+      // Cast to Proposal type (select * returns all columns)
+      const proposal = data as unknown as Proposal;
+
+      // Extract photos and mapData from form_data
+      const rawFormData = (proposal.form_data ?? {}) as Record<string, string>;
+      let photos: PhotoEntry[] = [];
+      let mapData: MapData | null = null;
+
+      // Parse embedded photos
+      if (rawFormData[PHOTOS_KEY]) {
+        try {
+          photos = JSON.parse(rawFormData[PHOTOS_KEY]) as PhotoEntry[];
+          console.log("[useProposals] Loaded", photos.length, "photos from form_data");
+        } catch (e) {
+          console.error("[useProposals] Failed to parse embedded photos:", e);
+        }
       }
 
-      const proposal = proposalResult.data as Proposal | null;
-      if (!proposal) return null;
+      // Parse embedded mapData
+      if (rawFormData[MAP_KEY]) {
+        try {
+          mapData = JSON.parse(rawFormData[MAP_KEY]) as MapData;
+        } catch (e) {
+          console.error("[useProposals] Failed to parse embedded mapData:", e);
+        }
+      }
 
-      // Convert DB photo rows to PhotoEntry objects
-      // Use data_url (base64) directly — no Storage URLs needed
-      const dbPhotos = (photosResult.data ?? []) as ProposalPhoto[];
-      const photos: PhotoEntry[] = dbPhotos.map((p, i) => ({
-        id: i + 1,
-        src: p.data_url || "",
-        caption: p.caption ?? "",
-        fileName: p.file_name ?? "",
-        zone: p.zone ?? "",
-        unitNumber: p.unit_number ?? "",
-        customZone: p.custom_zone ?? "",
-        concernType: "",
-        locationFound: "",
-      }));
+      // Strip internal keys from form_data so pages get clean formData
+      const cleanFormData: Record<string, string> = {};
+      for (const [k, v] of Object.entries(rawFormData)) {
+        if (k !== PHOTOS_KEY && k !== MAP_KEY) {
+          cleanFormData[k] = v;
+        }
+      }
+      // Override form_data on the proposal with cleaned version
+      const cleanProposal = { ...proposal, form_data: cleanFormData as unknown as Json };
 
-      // Parse mapData from JSON
-      const mapData = proposal.map_data ? (proposal.map_data as unknown as MapData) : null;
-
-      return { proposal, photos, mapData };
+      return { proposal: cleanProposal as Proposal, photos, mapData };
     },
     [user],
   );
@@ -225,9 +220,6 @@ export function useProposals() {
     async (id: string) => {
       if (!user) return;
       const supabase = createClient();
-      // Delete photo rows for this proposal
-      await supabase.from("proposal_photos").delete().eq("proposal_id", id);
-      // Delete the proposal itself
       const { error } = await supabase.from("proposals").delete().eq("id", id);
       if (error) {
         console.error("[useProposals] delete error:", error.message);
@@ -318,55 +310,4 @@ export function useProposals() {
   );
 
   return { proposals, loading, saveError, list, save, load, remove, updateStatus, finalize };
-}
-
-// ── Internal helpers ──
-
-/**
- * Save photos directly to proposal_photos table with base64 data_url.
- * No Supabase Storage needed — simpler and avoids bucket/policy complexity.
- */
-async function savePhotos(
-  supabase: ReturnType<typeof createClient>,
-  proposalId: string,
-  photos: PhotoEntry[],
-): Promise<void> {
-  // Delete existing photos for this proposal (simple replace strategy)
-  const { error: deleteErr } = await supabase
-    .from("proposal_photos")
-    .delete()
-    .eq("proposal_id", proposalId);
-
-  if (deleteErr) {
-    console.warn("[savePhotos] Delete old photos failed:", deleteErr.message);
-    // Continue anyway — inserts may still work
-  }
-
-  // Insert each photo with base64 data directly in data_url column
-  for (let i = 0; i < photos.length; i++) {
-    const photo = photos[i];
-    console.log(`[savePhotos] Inserting photo ${i + 1}/${photos.length}, src length: ${photo.src.length}`);
-
-    const { error: insertErr } = await supabase.from("proposal_photos").insert({
-      proposal_id: proposalId,
-      storage_path: `inline_${i}`,  // placeholder — not used for inline storage
-      file_name: photo.fileName || `photo_${i + 1}.jpg`,
-      caption: photo.caption || "",
-      zone: photo.zone || "",
-      unit_number: photo.unitNumber || "",
-      custom_zone: photo.customZone || "",
-      sort_order: i,
-      data_url: photo.src,  // Store base64 data URL directly in DB
-    });
-
-    if (insertErr) {
-      console.error(`[savePhotos] Insert failed for photo ${i + 1}:`, insertErr.message);
-      // If data_url column doesn't exist, try without it (fallback)
-      if (insertErr.message?.includes("data_url")) {
-        console.warn("[savePhotos] data_url column not found — run the migration SQL! Photo will be skipped.");
-      }
-    } else {
-      console.log(`[savePhotos] Photo ${i + 1} saved to DB`);
-    }
-  }
 }
