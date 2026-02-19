@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 const NAV_ITEMS = [
   { href: "/proposals", label: "Proposal Builder", icon: "\u{1F4CB}" },
+  { href: "/cost-of-inaction", label: "Cost Calculator", icon: "\u{1F4B8}" },
 ];
 
 export default function NavBar() {

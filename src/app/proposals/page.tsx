@@ -118,7 +118,7 @@ export default function ProposalGeneratorPage() {
   // Load saved proposals + clients
   useEffect(() => {
     if (user) {
-      listProposals().then((items) => setSavedProposals(items));
+      listProposals().then((items) => setSavedProposals(items.filter((p) => p.template_id !== "cost_of_inaction")));
       listClients().then((items) => setClientsList(items));
     }
   }, [user, listProposals, listClients]);
