@@ -20,8 +20,8 @@ const ResultsDashboard = dynamic(
   { ssr: false, loading: () => <div style={{ padding: 40, textAlign: "center", color: "var(--text5)" }}>Loading charts...</div> },
 );
 
-const SANS = "'DM Sans',sans-serif";
-const MONO = "'DM Mono',monospace";
+const SERIF = "'Playfair Display','Georgia',serif";
+const SANS = "'Plus Jakarta Sans','DM Sans',sans-serif";
 
 export default function SavedCalculationPage() {
   const params = useParams();
@@ -177,7 +177,7 @@ export default function SavedCalculationPage() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, minWidth: 0 }}>
           <button onClick={() => window.location.href = "/cost-of-inaction"}
-            style={{ background: "var(--bg3)", border: "1px solid var(--border3)", borderRadius: 8, color: "var(--text3)", cursor: "pointer", padding: "5px 12px", fontSize: 12, flexShrink: 0 }}>
+            style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 16, color: "var(--text3)", cursor: "pointer", padding: "6px 14px", fontSize: 11, flexShrink: 0, fontWeight: 600, fontFamily: SANS }}>
             ← {isMobile ? "" : "Back"}
           </button>
           <span style={{ fontSize: 18, flexShrink: 0 }}>{preset.icon}</span>
@@ -198,18 +198,20 @@ export default function SavedCalculationPage() {
             <button key={tab} onClick={() => setActiveTab(tab)}
               style={{
                 background: activeTab === tab ? "var(--bg3)" : "transparent",
-                border: `1px solid ${activeTab === tab ? "var(--border3)" : "transparent"}`,
-                borderRadius: 8, color: activeTab === tab ? "var(--text)" : "var(--text4)",
-                cursor: "pointer", padding: "5px 10px", fontSize: 11, fontWeight: 600,
+                border: `1px solid ${activeTab === tab ? "var(--border)" : "transparent"}`,
+                borderRadius: 16, color: activeTab === tab ? "var(--text)" : "var(--text4)",
+                cursor: "pointer", padding: "6px 12px", fontSize: 10, fontWeight: 700,
+                textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: SANS,
               }}>
               {tab === "calculator" ? "✏️ Edit" : "📊 Results"}
             </button>
           ))}
           <button onClick={handleSave} disabled={saving}
             style={{
-              background: saving ? "var(--bg3)" : "linear-gradient(135deg,#10b981,#059669)",
-              border: "none", borderRadius: 8, color: "#fff", cursor: saving ? "not-allowed" : "pointer",
-              padding: isMobile ? "5px 10px" : "5px 14px", fontSize: isMobile ? 11 : 12, fontWeight: 600, opacity: saving ? 0.6 : 1,
+              background: saving ? "var(--bg3)" : "#1a1a1a",
+              border: "none", borderRadius: 16, color: "#fff", cursor: saving ? "not-allowed" : "pointer",
+              padding: isMobile ? "6px 12px" : "6px 16px", fontSize: 10, fontWeight: 700, opacity: saving ? 0.6 : 1,
+              textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: SANS,
             }}>
             {saving ? "..." : "Save"}
           </button>
@@ -251,14 +253,14 @@ export default function SavedCalculationPage() {
           </div>
 
           <div style={{
-            background: `${preset.color}15`, border: `1px solid ${preset.color}30`, borderRadius: 12,
-            padding: "14px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center",
+            background: `${preset.color}12`, border: `2px solid ${preset.color}30`, borderRadius: 20,
+            padding: "16px 20px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center",
           }}>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>Monthly Total</span>
-            <span style={{ fontSize: 20, fontWeight: 800, color: preset.color, fontFamily: MONO }}>${monthlyTotal.toLocaleString()}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: SANS }}>Monthly Total</span>
+            <span style={{ fontSize: 24, fontWeight: 700, color: preset.color, fontFamily: SERIF }}>${monthlyTotal.toLocaleString()}</span>
           </div>
 
-          <h3 style={{ fontSize: 12, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 10 }}>
+          <h3 style={{ fontSize: 9, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase", letterSpacing: "0.25em", marginBottom: 12, fontFamily: SANS }}>
             Cost Categories (per month)
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
@@ -274,20 +276,20 @@ export default function SavedCalculationPage() {
             <input type="text" value={customLabel} onChange={(e) => setCustomLabel(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleAddCustom(); }}
               placeholder="Add custom cost category..."
-              style={{ flex: 1, padding: "8px 12px", background: "var(--iBg)", border: "1px solid var(--iBd)", borderRadius: 8, color: "var(--text)", fontSize: 12, fontFamily: SANS, outline: "none" }}
+              style={{ flex: 1, padding: "10px 14px", background: "var(--iBg)", border: "1px solid var(--iBd)", borderRadius: 16, color: "var(--text)", fontSize: 12, fontFamily: SANS, outline: "none" }}
             />
             <button onClick={handleAddCustom}
-              style={{ background: preset.color, border: "none", borderRadius: 8, color: "#fff", padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
+              style={{ background: preset.color, border: "none", borderRadius: 16, color: "#fff", padding: "10px 18px", fontSize: 10, fontWeight: 700, cursor: "pointer", flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: SANS }}>
               + Add
             </button>
           </div>
 
           <div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 6 }}>Notes</label>
+            <label style={{ fontSize: 9, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase", letterSpacing: "0.25em", display: "block", marginBottom: 8, fontFamily: SANS }}>Notes</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
               placeholder="Additional notes..."
               rows={3}
-              style={{ width: "100%", padding: "10px 14px", background: "var(--iBg)", border: "1px solid var(--iBd)", borderRadius: 10, color: "var(--text)", fontSize: 12, fontFamily: SANS, outline: "none", resize: "vertical" }}
+              style={{ width: "100%", padding: "12px 16px", background: "var(--iBg)", border: "1px solid var(--iBd)", borderRadius: 16, color: "var(--text)", fontSize: 12, fontFamily: SANS, outline: "none", resize: "vertical", lineHeight: 1.6 }}
             />
           </div>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-const SANS = "'DM Sans',sans-serif";
+const SANS = "'Plus Jakarta Sans','DM Sans',sans-serif";
 
 const PRESETS = [
   { label: "3 mo", months: 3 },
@@ -21,7 +21,10 @@ export default function TimeframeSelector({ months, onChange, accentColor }: Tim
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: SANS }}>
+      <label style={{
+        fontSize: 9, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase",
+        letterSpacing: "0.25em", fontFamily: SANS,
+      }}>
         Projection Timeframe
       </label>
 
@@ -33,10 +36,11 @@ export default function TimeframeSelector({ months, onChange, accentColor }: Tim
             style={{
               background: months === p.months ? accentColor : "var(--bg3)",
               color: months === p.months ? "#fff" : "var(--text4)",
-              border: `1px solid ${months === p.months ? accentColor : "var(--border3)"}`,
-              borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 600,
-              cursor: "pointer", fontFamily: SANS, transition: "all 0.15s",
+              border: `1px solid ${months === p.months ? accentColor : "var(--border)"}`,
+              borderRadius: 24, padding: "8px 16px", fontSize: 12, fontWeight: 700,
+              cursor: "pointer", fontFamily: SANS, transition: "all 0.2s ease",
               touchAction: "manipulation",
+              boxShadow: months === p.months ? `0 4px 12px -2px ${accentColor}44` : "none",
             }}
           >
             {p.label}
@@ -45,7 +49,7 @@ export default function TimeframeSelector({ months, onChange, accentColor }: Tim
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 12, color: "var(--text4)", fontFamily: SANS }}>Custom:</span>
+        <span style={{ fontSize: 11, color: "var(--text5)", fontFamily: SANS, fontWeight: 600 }}>Custom:</span>
         <input
           type="number"
           min={1}
@@ -58,12 +62,12 @@ export default function TimeframeSelector({ months, onChange, accentColor }: Tim
           placeholder={String(months)}
           inputMode="numeric"
           style={{
-            width: 60, padding: "5px 8px", background: "var(--iBg)", border: "1px solid var(--iBd)",
-            borderRadius: 8, color: "var(--text)", fontSize: 12, fontFamily: SANS, outline: "none",
-            textAlign: "center",
+            width: 60, padding: "6px 10px", background: "var(--iBg)", border: "1px solid var(--iBd)",
+            borderRadius: 12, color: "var(--text)", fontSize: 12, fontFamily: SANS, outline: "none",
+            textAlign: "center", fontWeight: 600,
           }}
         />
-        <span style={{ fontSize: 12, color: "var(--text5)", fontFamily: SANS }}>months</span>
+        <span style={{ fontSize: 11, color: "var(--text5)", fontFamily: SANS }}>months</span>
       </div>
     </div>
   );

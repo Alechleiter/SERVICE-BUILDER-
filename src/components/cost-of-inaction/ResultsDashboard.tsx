@@ -7,10 +7,10 @@ import {
 } from "recharts";
 import type { CostEntry } from "@/lib/cost-of-inaction/types";
 
-const SANS = "'DM Sans',sans-serif";
-const MONO = "'DM Mono',monospace";
+const SERIF = "'Playfair Display','Georgia',serif";
+const SANS = "'Plus Jakarta Sans','DM Sans',sans-serif";
 
-const PIE_COLORS = ["#DC2626", "#F59E0B", "#E76F51", "#2A9D8F", "#6366F1", "#EC4899", "#8B5CF6", "#059669"];
+const PIE_COLORS = ["#DC2626", "#E76F51", "#F59E0B", "#2A9D8F", "#6366F1", "#EC4899", "#8B5CF6", "#059669"];
 
 function formatDollars(n: number): string {
   return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -47,7 +47,6 @@ export default function ResultsDashboard({
 
   const projectedTotal = monthlyTotal * timeframeMonths;
 
-  // Bar chart data — sorted by amount desc
   const barData = useMemo(() => {
     return [...activeEntries]
       .sort((a, b) => b.amount - a.amount)
@@ -58,7 +57,6 @@ export default function ResultsDashboard({
       }));
   }, [activeEntries, timeframeMonths]);
 
-  // Pie chart data
   const pieData = useMemo(() => {
     return activeEntries.map((e) => ({
       name: e.label,
@@ -66,7 +64,6 @@ export default function ResultsDashboard({
     }));
   }, [activeEntries, timeframeMonths]);
 
-  // Timeline data — cumulative cost month by month
   const timelineData = useMemo(() => {
     const points = [];
     for (let m = 0; m <= timeframeMonths; m++) {
@@ -77,96 +74,175 @@ export default function ResultsDashboard({
 
   if (activeEntries.length === 0) {
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "var(--text5)" }}>
-        <div style={{ fontSize: 48, marginBottom: 12 }}>📊</div>
-        <div style={{ fontSize: 14, fontFamily: SANS }}>Enable cost categories and enter amounts to see the analysis</div>
+      <div style={{ padding: isMobile ? 32 : 60, textAlign: "center" }}>
+        <div style={{ fontSize: 56, marginBottom: 16, opacity: 0.3 }}>📊</div>
+        <div style={{ fontFamily: SERIF, fontSize: 20, fontStyle: "italic", color: "var(--text4)", lineHeight: 1.6 }}>
+          Enable cost categories and enter<br />amounts to see the analysis.
+        </div>
       </div>
     );
   }
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24, fontFamily: SANS }}>
-      {/* ── Big Total Banner ── */}
-      <div style={{
-        background: "linear-gradient(135deg, #DC2626, #F59E0B)",
-        borderRadius: 16, padding: isMobile ? "28px 20px" : "36px 32px",
-        textAlign: "center", color: "#fff",
-        boxShadow: "0 8px 32px rgba(220,38,38,0.3)",
-      }}>
-        <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "2px", opacity: 0.85, marginBottom: 8 }}>
-          Estimated Cost of Inaction
-        </div>
-        <div style={{
-          fontSize: isMobile ? 40 : 56, fontWeight: 800, letterSpacing: "-2px",
-          textShadow: "0 2px 12px rgba(0,0,0,0.2)",
-          fontFamily: SANS,
-          transition: "all 0.3s ease",
-        }}>
-          {formatDollars(projectedTotal)}
-        </div>
-        <div style={{ fontSize: 14, opacity: 0.9, marginTop: 6 }}>
-          over {formatTimeframe(timeframeMonths)} — {industryName}
-        </div>
-        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4, fontFamily: MONO }}>
-          {formatDollars(monthlyTotal)}/month
-        </div>
-      </div>
+  const sorted = [...activeEntries].sort((a, b) => b.amount - a.amount);
 
-      {/* ── Cost Breakdown Cards ── */}
-      <div>
-        <h4 style={{ fontSize: 12, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 10 }}>
-          Cost Breakdown
-        </h4>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {[...activeEntries].sort((a, b) => b.amount - a.amount).map((e) => (
-            <div key={e.categoryId} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "10px 14px", background: "var(--bg2)", border: "1px solid var(--border2)",
-              borderRadius: 8,
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 20 : 28, fontFamily: SANS }}>
+
+      {/* ══ Two-Column Output Card (SalesGapPro Style) ══ */}
+      <div style={{
+        background: "var(--bg2)",
+        borderRadius: isMobile ? 24 : 48,
+        padding: isMobile ? 20 : 48,
+        boxShadow: "0 25px 50px -12px rgba(0,0,0,0.15)",
+        border: "1px solid var(--border)",
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+        gap: isMobile ? 20 : 40,
+      }}>
+        {/* Left: Analysis Brief */}
+        <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 16 : 28 }}>
+          <div>
+            <span style={{
+              color: "#DC2626", fontWeight: 700, fontSize: 10, textTransform: "uppercase",
+              letterSpacing: "0.4em", fontFamily: SANS,
             }}>
-              <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500 }}>{e.label}</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: accentColor, fontFamily: MONO }}>
-                {formatDollars(e.amount * timeframeMonths)}
+              Risk Analysis Brief
+            </span>
+            <h3 style={{ fontFamily: SERIF, fontSize: isMobile ? 24 : 32, marginTop: 8, lineHeight: 1.2, color: "var(--text)" }}>
+              {industryName}
+            </h3>
+            {monthlyTotal > 0 && (
+              <p style={{ fontFamily: SERIF, fontStyle: "italic", color: "var(--text4)", fontSize: isMobile ? 15 : 18, lineHeight: 1.7, marginTop: 12 }}>
+                &ldquo;Every month without action costs an estimated {formatDollars(monthlyTotal)}. Over {formatTimeframe(timeframeMonths)}, this exposure compounds to a significant financial burden that far exceeds the cost of proactive treatment.&rdquo;
+              </p>
+            )}
+          </div>
+
+          {/* Line Items */}
+          <div style={{
+            padding: isMobile ? 16 : 24,
+            background: "var(--bg)",
+            borderRadius: isMobile ? 16 : 20,
+            border: "1px solid var(--border)",
+          }}>
+            <h4 style={{
+              fontSize: 10, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase",
+              letterSpacing: "0.25em", marginBottom: 16, fontFamily: SANS,
+            }}>
+              Cost Breakdown
+            </h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {sorted.map((e, i) => (
+                <div key={e.categoryId} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "12px 0",
+                  borderBottom: i < sorted.length - 1 ? "1px solid var(--border)" : "none",
+                }}>
+                  <span style={{ fontSize: 13, color: "var(--text3)", fontWeight: 500 }}>{e.label}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", fontFamily: SANS }}>
+                    {formatDollars(e.amount * timeframeMonths)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Big Red Total Card */}
+        <div style={{
+          background: "#DC2626",
+          borderRadius: isMobile ? 24 : 40,
+          padding: isMobile ? 28 : 48,
+          color: "#fff",
+          textAlign: "center",
+          display: "flex", flexDirection: "column", justifyContent: "center",
+          boxShadow: "0 25px 50px -12px rgba(220,38,38,0.25)",
+          minHeight: isMobile ? 280 : 360,
+        }}>
+          <span style={{
+            fontSize: 11, textTransform: "uppercase", fontWeight: 700,
+            letterSpacing: "0.3em", opacity: 0.7, marginBottom: isMobile ? 12 : 20,
+            fontFamily: SANS,
+          }}>
+            Calculated Exposure
+          </span>
+          <p style={{
+            fontFamily: SERIF, fontSize: isMobile ? 48 : 72,
+            lineHeight: 1, marginBottom: isMobile ? 24 : 40,
+            letterSpacing: "-2px",
+          }}>
+            {formatDollars(projectedTotal)}
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            {sorted.slice(0, 6).map((e) => (
+              <div key={e.categoryId} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                borderBottom: "1px solid rgba(255,255,255,0.2)", padding: "12px 0",
+              }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", opacity: 0.6 }}>
+                  {e.label}
+                </span>
+                <span style={{ fontSize: 16, fontWeight: 700 }}>
+                  {formatDollars(e.amount * timeframeMonths)}
+                </span>
+              </div>
+            ))}
+            {/* Monthly rate */}
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "14px 0 0", marginTop: 4,
+            }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", opacity: 0.6 }}>
+                Monthly Rate
+              </span>
+              <span style={{ fontSize: 18, fontWeight: 700, fontFamily: SERIF }}>
+                {formatDollars(monthlyTotal)}
               </span>
             </div>
-          ))}
+          </div>
         </div>
       </div>
 
-      {/* ── Charts Grid ── */}
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 20 }}>
+      {/* ══ Charts Section ══ */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 16 : 20 }}>
         {/* Bar Chart */}
         <div style={{
-          background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 12,
-          padding: 16, gridColumn: isMobile ? "1" : "1 / -1",
+          background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: isMobile ? 20 : 28,
+          padding: isMobile ? 16 : 24, gridColumn: isMobile ? "1" : "1 / -1",
         }}>
-          <h4 style={{ fontSize: 12, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 12px" }}>
+          <h4 style={{
+            fontSize: 10, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase",
+            letterSpacing: "0.25em", margin: "0 0 16px", fontFamily: SANS,
+          }}>
             Cost by Category
           </h4>
-          <ResponsiveContainer width="100%" height={Math.max(200, activeEntries.length * 40)}>
+          <ResponsiveContainer width="100%" height={Math.max(200, activeEntries.length * 44)}>
             <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis type="number" tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} fontSize={10} stroke="var(--text5)" />
               <YAxis type="category" dataKey="name" width={isMobile ? 100 : 140} fontSize={10} stroke="var(--text4)" />
               <Tooltip
                 formatter={(value?: number | string) => [formatDollars(Number(value) || 0), "Cost"]}
-                contentStyle={{ background: "var(--bgElevated)", border: "1px solid var(--border3)", borderRadius: 8, fontSize: 12 }}
+                contentStyle={{ background: "var(--bgElevated)", border: "1px solid var(--border3)", borderRadius: 12, fontSize: 12, fontFamily: SANS }}
                 labelStyle={{ color: "var(--text)" }}
               />
-              <Bar dataKey="amount" fill="#DC2626" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="amount" fill="#DC2626" radius={[0, 6, 6, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         {/* Pie Chart */}
         <div style={{
-          background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 12,
-          padding: 16,
+          background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: isMobile ? 20 : 28,
+          padding: isMobile ? 16 : 24,
         }}>
-          <h4 style={{ fontSize: 12, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 12px" }}>
+          <h4 style={{
+            fontSize: 10, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase",
+            letterSpacing: "0.25em", margin: "0 0 16px", fontFamily: SANS,
+          }}>
             Cost Distribution
           </h4>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie
                 data={pieData}
@@ -188,7 +264,7 @@ export default function ResultsDashboard({
               </Pie>
               <Tooltip
                 formatter={(value?: number | string) => [formatDollars(Number(value) || 0), "Cost"]}
-                contentStyle={{ background: "var(--bgElevated)", border: "1px solid var(--border3)", borderRadius: 8, fontSize: 12 }}
+                contentStyle={{ background: "var(--bgElevated)", border: "1px solid var(--border3)", borderRadius: 12, fontSize: 12, fontFamily: SANS }}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -196,13 +272,16 @@ export default function ResultsDashboard({
 
         {/* Timeline Area Chart */}
         <div style={{
-          background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 12,
-          padding: 16,
+          background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: isMobile ? 20 : 28,
+          padding: isMobile ? 16 : 24,
         }}>
-          <h4 style={{ fontSize: 12, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "1px", margin: "0 0 12px" }}>
+          <h4 style={{
+            fontSize: 10, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase",
+            letterSpacing: "0.25em", margin: "0 0 16px", fontFamily: SANS,
+          }}>
             Cumulative Cost Over Time
           </h4>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={timelineData} margin={{ left: 10, right: 10, top: 10, bottom: 5 }}>
               <defs>
                 <linearGradient id="costGradient" x1="0" y1="0" x2="0" y2="1">
@@ -225,7 +304,7 @@ export default function ResultsDashboard({
               <Tooltip
                 formatter={(value?: number | string) => [formatDollars(Number(value) || 0), "Total Cost"]}
                 labelFormatter={(m: React.ReactNode) => `Month ${m}`}
-                contentStyle={{ background: "var(--bgElevated)", border: "1px solid var(--border3)", borderRadius: 8, fontSize: 12 }}
+                contentStyle={{ background: "var(--bgElevated)", border: "1px solid var(--border3)", borderRadius: 12, fontSize: 12, fontFamily: SANS }}
               />
               <Area type="monotone" dataKey="cost" stroke="#DC2626" fill="url(#costGradient)" strokeWidth={2} />
             </AreaChart>

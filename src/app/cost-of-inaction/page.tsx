@@ -23,8 +23,8 @@ const ResultsDashboard = dynamic(
   { ssr: false, loading: () => <div style={{ padding: 40, textAlign: "center", color: "var(--text5)" }}>Loading charts...</div> },
 );
 
-const SANS = "'DM Sans',sans-serif";
-const MONO = "'DM Mono',monospace";
+const SERIF = "'Playfair Display','Georgia',serif";
+const SANS = "'Plus Jakarta Sans','DM Sans',sans-serif";
 
 function initEntries(preset: IndustryPreset): CostEntry[] {
   return preset.categories.map((c) => ({
@@ -173,20 +173,34 @@ export default function CostOfInactionPage() {
     return (
       <div ref={mobileRef} style={{ minHeight: "calc(100vh - 48px)", background: "var(--bg)", color: "var(--text)", fontFamily: SANS }}>
         {/* Hero */}
-        <div style={{ maxWidth: 960, margin: "0 auto", padding: isMobile ? "24px 16px 16px" : "40px 16px 20px", textAlign: "center" }}>
-          <div style={{ fontSize: 40, marginBottom: 8 }}>💸</div>
-          <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, marginBottom: 6, letterSpacing: "-0.5px" }}>
-            Cost of Inaction
+        <div style={{ maxWidth: 960, margin: "0 auto", padding: isMobile ? "32px 16px 20px" : "56px 16px 28px", textAlign: "center" }}>
+          <div style={{
+            display: "inline-block", padding: "6px 16px", borderRadius: 24,
+            background: "rgba(220,38,38,0.08)", color: "#DC2626",
+            fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.4em",
+            marginBottom: 16, fontFamily: SANS,
+          }}>
+            Sales Architecture Tool
+          </div>
+          <h1 style={{
+            fontSize: isMobile ? 28 : 40, fontFamily: SERIF, fontWeight: 700,
+            marginBottom: 10, lineHeight: 1.15, letterSpacing: "-0.5px",
+          }}>
+            Cost of{" "}
+            <span style={{ fontStyle: "italic", fontWeight: 400, color: "#DC2626" }}>Inaction.</span>
           </h1>
-          <p style={{ color: "var(--text4)", fontSize: 13, maxWidth: 500, margin: "0 auto" }}>
-            Show customers the real financial cost of NOT addressing pest problems. Select an industry to get started.
+          <p style={{
+            color: "var(--text4)", fontSize: 12, maxWidth: 440, margin: "0 auto",
+            lineHeight: 1.7, fontWeight: 300, fontFamily: SANS,
+          }}>
+            Quantify the high price of doing nothing. Reframe service as risk control.
           </p>
         </div>
 
         {/* Saved Calculations */}
         {user && savedCalcs.length > 0 && (
           <div style={{ maxWidth: 960, margin: "0 auto 28px", padding: "0 16px" }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: "var(--text4)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "1px", fontFamily: MONO }}>
+            <h3 style={{ fontSize: 9, fontWeight: 700, color: "var(--text5)", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.25em", fontFamily: SANS }}>
               Saved Calculations
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -194,7 +208,7 @@ export default function CostOfInactionPage() {
                 return (
                   <div key={p.id} style={{
                     display: "flex", alignItems: "center", gap: 0,
-                    background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 10,
+                    background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 20,
                     overflow: "hidden",
                   }}>
                     <button onClick={() => router.push(`/cost-of-inaction/${p.id}`)}
@@ -209,7 +223,7 @@ export default function CostOfInactionPage() {
                         <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {p.name || "Untitled"}
                         </div>
-                        <div style={{ fontSize: 11, color: "var(--text5)", fontFamily: MONO }}>
+                        <div style={{ fontSize: 10, color: "var(--text5)", fontFamily: SANS, fontWeight: 300 }}>
                           {new Date(p.updated_at).toLocaleDateString()}
                         </div>
                       </div>
@@ -263,7 +277,7 @@ export default function CostOfInactionPage() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, minWidth: 0 }}>
           <button onClick={() => setSelectedIndustry(null)}
-            style={{ background: "var(--bg3)", border: "1px solid var(--border3)", borderRadius: 8, color: "var(--text3)", cursor: "pointer", padding: "5px 12px", fontSize: 12, flexShrink: 0 }}>
+            style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 16, color: "var(--text3)", cursor: "pointer", padding: "6px 14px", fontSize: 11, flexShrink: 0, fontWeight: 600, fontFamily: SANS }}>
             ← {isMobile ? "" : "Industries"}
           </button>
           <span style={{ fontSize: 18, flexShrink: 0 }}>{preset!.icon}</span>
@@ -275,9 +289,10 @@ export default function CostOfInactionPage() {
             <button key={tab} onClick={() => setActiveTab(tab)}
               style={{
                 background: activeTab === tab ? "var(--bg3)" : "transparent",
-                border: `1px solid ${activeTab === tab ? "var(--border3)" : "transparent"}`,
-                borderRadius: 8, color: activeTab === tab ? "var(--text)" : "var(--text4)",
-                cursor: "pointer", padding: "5px 10px", fontSize: 11, fontWeight: 600,
+                border: `1px solid ${activeTab === tab ? "var(--border)" : "transparent"}`,
+                borderRadius: 16, color: activeTab === tab ? "var(--text)" : "var(--text4)",
+                cursor: "pointer", padding: "6px 12px", fontSize: 10, fontWeight: 700,
+                textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: SANS,
               }}>
               {tab === "calculator" ? "✏️ Edit" : "📊 Results"}
             </button>
@@ -285,9 +300,10 @@ export default function CostOfInactionPage() {
           {user && (
             <button onClick={handleSave} disabled={saving}
               style={{
-                background: saving ? "var(--bg3)" : "linear-gradient(135deg,#10b981,#059669)",
-                border: "none", borderRadius: 8, color: "#fff", cursor: saving ? "not-allowed" : "pointer",
-                padding: isMobile ? "5px 10px" : "5px 14px", fontSize: isMobile ? 11 : 12, fontWeight: 600, opacity: saving ? 0.6 : 1,
+                background: saving ? "var(--bg3)" : "#1a1a1a",
+                border: "none", borderRadius: 16, color: "#fff", cursor: saving ? "not-allowed" : "pointer",
+                padding: isMobile ? "6px 12px" : "6px 16px", fontSize: 10, fontWeight: 700, opacity: saving ? 0.6 : 1,
+                textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: SANS,
               }}>
               {saving ? "..." : "Save"}
             </button>
@@ -328,7 +344,7 @@ export default function CostOfInactionPage() {
         }}>
           {/* Property Name */}
           <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 6 }}>
+            <label style={{ fontSize: 9, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase", letterSpacing: "0.25em", display: "block", marginBottom: 8, fontFamily: SANS }}>
               Property / Business Name
             </label>
             <input
@@ -337,8 +353,9 @@ export default function CostOfInactionPage() {
               onChange={(e) => setPropertyName(e.target.value)}
               placeholder="e.g. Hilton Garden Inn Downtown"
               style={{
-                width: "100%", padding: "10px 14px", background: "var(--iBg)", border: "1px solid var(--iBd)",
-                borderRadius: 10, color: "var(--text)", fontSize: 13, fontFamily: SANS, outline: "none",
+                width: "100%", padding: "12px 16px", background: "var(--iBg)", border: "1px solid var(--iBd)",
+                borderRadius: 16, color: "var(--text)", fontSize: 14, fontFamily: SANS, outline: "none",
+                fontWeight: 600,
               }}
             />
           </div>
@@ -350,18 +367,18 @@ export default function CostOfInactionPage() {
 
           {/* Quick Total Display */}
           <div style={{
-            background: `${preset!.color}15`, border: `1px solid ${preset!.color}30`, borderRadius: 12,
-            padding: "14px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center",
+            background: `${preset!.color}12`, border: `2px solid ${preset!.color}30`, borderRadius: 20,
+            padding: "16px 20px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center",
           }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Monthly Total</span>
-            <span style={{ fontSize: 20, fontWeight: 800, color: preset!.color, fontFamily: MONO }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: SANS }}>Monthly Total</span>
+            <span style={{ fontSize: 24, fontWeight: 700, color: preset!.color, fontFamily: SERIF }}>
               ${monthlyTotal.toLocaleString()}
             </span>
           </div>
 
           {/* Cost Categories */}
           <div style={{ marginBottom: 16 }}>
-            <h3 style={{ fontSize: 12, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 10 }}>
+            <h3 style={{ fontSize: 9, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase", letterSpacing: "0.25em", marginBottom: 12, fontFamily: SANS }}>
               Cost Categories (per month)
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -383,14 +400,15 @@ export default function CostOfInactionPage() {
               onKeyDown={(e) => { if (e.key === "Enter") handleAddCustom(); }}
               placeholder="Add custom cost category..."
               style={{
-                flex: 1, padding: "8px 12px", background: "var(--iBg)", border: "1px solid var(--iBd)",
-                borderRadius: 8, color: "var(--text)", fontSize: 12, fontFamily: SANS, outline: "none",
+                flex: 1, padding: "10px 14px", background: "var(--iBg)", border: "1px solid var(--iBd)",
+                borderRadius: 16, color: "var(--text)", fontSize: 12, fontFamily: SANS, outline: "none",
               }}
             />
             <button onClick={handleAddCustom}
               style={{
-                background: preset!.color, border: "none", borderRadius: 8, color: "#fff",
-                padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0,
+                background: preset!.color, border: "none", borderRadius: 16, color: "#fff",
+                padding: "10px 18px", fontSize: 10, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+                textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: SANS,
               }}>
               + Add
             </button>
@@ -398,7 +416,7 @@ export default function CostOfInactionPage() {
 
           {/* Notes */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text4)", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 6 }}>
+            <label style={{ fontSize: 9, fontWeight: 700, color: "var(--text5)", textTransform: "uppercase", letterSpacing: "0.25em", display: "block", marginBottom: 8, fontFamily: SANS }}>
               Notes
             </label>
             <textarea
@@ -407,8 +425,9 @@ export default function CostOfInactionPage() {
               placeholder="Additional notes for this analysis..."
               rows={3}
               style={{
-                width: "100%", padding: "10px 14px", background: "var(--iBg)", border: "1px solid var(--iBd)",
-                borderRadius: 10, color: "var(--text)", fontSize: 12, fontFamily: SANS, outline: "none", resize: "vertical",
+                width: "100%", padding: "12px 16px", background: "var(--iBg)", border: "1px solid var(--iBd)",
+                borderRadius: 16, color: "var(--text)", fontSize: 12, fontFamily: SANS, outline: "none", resize: "vertical",
+                lineHeight: 1.6,
               }}
             />
           </div>
