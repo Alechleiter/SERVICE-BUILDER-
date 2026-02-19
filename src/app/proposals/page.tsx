@@ -32,7 +32,7 @@ const MONO = "'DM Mono',monospace";
 export default function ProposalGeneratorPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { list: listProposals, save: saveProposal, finalize: finalizeProposal, saveError } = useProposals();
+  const { list: listProposals, save: saveProposal, finalize: finalizeProposal, remove: removeProposal, saveError } = useProposals();
   const { list: listClients } = useClients();
   const [isMobile, mobileRef] = useIsMobile(768);
 
@@ -462,32 +462,55 @@ export default function ProposalGeneratorPage() {
                 const t = TEMPLATES[p.template_id as TemplateId];
                 const clientName = p.client_id ? clientsList.find((c) => c.id === p.client_id)?.name : null;
                 return (
-                  <button key={p.id} onClick={() => router.push(`/proposals/${p.id}`)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
-                      background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 10,
-                      cursor: "pointer", textAlign: "left", transition: "all 0.15s",
-                      color: "var(--text)", fontFamily: SANS,
-                    }}>
-                    <span style={{ fontSize: 18 }}>{t?.icon ?? "\u{1F4CB}"}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {p.name || "Untitled"}
-                        {clientName && <span style={{ fontWeight: 400, color: "var(--text4)", marginLeft: 6 }}>— {clientName}</span>}
+                  <div key={p.id} style={{
+                    display: "flex", alignItems: "center", gap: 0,
+                    background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 10,
+                    overflow: "hidden",
+                  }}>
+                    <button onClick={() => router.push(`/proposals/${p.id}`)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
+                        background: "transparent", border: "none", borderRadius: 0,
+                        cursor: "pointer", textAlign: "left", transition: "all 0.15s",
+                        color: "var(--text)", fontFamily: SANS, flex: 1, minWidth: 0,
+                      }}>
+                      <span style={{ fontSize: 18, flexShrink: 0 }}>{t?.icon ?? "\u{1F4CB}"}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {p.name || "Untitled"}
+                          {clientName && <span style={{ fontWeight: 400, color: "var(--text4)", marginLeft: 6 }}>— {clientName}</span>}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text5)", fontFamily: MONO }}>
+                          {t?.name ?? p.template_id} {"\u00B7"} {p.status} {"\u00B7"} {new Date(p.updated_at).toLocaleDateString()}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 11, color: "var(--text5)", fontFamily: MONO }}>
-                        {t?.name ?? p.template_id} {"\u00B7"} {p.status} {"\u00B7"} {new Date(p.updated_at).toLocaleDateString()}
-                      </div>
-                    </div>
-                    <span style={{
-                      fontSize: 10, padding: "2px 8px", borderRadius: 6,
-                      background: p.status === "accepted" ? "rgba(16,185,129,0.1)" : "var(--bg3)",
-                      color: p.status === "accepted" ? "var(--accent)" : "var(--text5)",
-                      fontWeight: 600, textTransform: "uppercase",
-                    }}>
-                      {p.status}
-                    </span>
-                  </button>
+                      <span style={{
+                        fontSize: 10, padding: "2px 8px", borderRadius: 6,
+                        background: p.status === "accepted" ? "rgba(16,185,129,0.1)" : "var(--bg3)",
+                        color: p.status === "accepted" ? "var(--accent)" : "var(--text5)",
+                        fontWeight: 600, textTransform: "uppercase", flexShrink: 0,
+                      }}>
+                        {p.status}
+                      </span>
+                    </button>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!confirm(`Delete "${p.name || "Untitled"}"? This cannot be undone.`)) return;
+                        await removeProposal(p.id);
+                        setSavedProposals((prev) => prev.filter((x) => x.id !== p.id));
+                      }}
+                      style={{
+                        background: "transparent", border: "none", borderLeft: "1px solid var(--border2)",
+                        color: "#ef4444", cursor: "pointer", padding: "0 14px", fontSize: 16,
+                        flexShrink: 0, height: "100%", minHeight: 52, display: "flex", alignItems: "center",
+                        transition: "background 0.15s",
+                      }}
+                      title="Delete proposal"
+                    >
+                      {"\u{1F5D1}"}
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -545,7 +568,7 @@ export default function ProposalGeneratorPage() {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", width: isMobile ? "100%" : "auto", justifyContent: isMobile ? "flex-start" : "flex-end" }}>
           {(["form", "preview"] as const).map((tab) => (
             <button key={tab} onClick={() => { setActiveTab(tab); if (tab === "preview") setOpenSectionIndex(null); }}
               style={{
@@ -578,17 +601,17 @@ export default function ProposalGeneratorPage() {
                 style={{
                   background: saving ? "var(--bg3)" : "linear-gradient(135deg,#10b981,#059669)",
                   border: "none", borderRadius: 8, color: "#fff", cursor: saving ? "not-allowed" : "pointer",
-                  padding: "5px 14px", fontSize: 12, fontWeight: 600, opacity: saving ? 0.6 : 1,
+                  padding: isMobile ? "5px 10px" : "5px 14px", fontSize: isMobile ? 11 : 12, fontWeight: 600, opacity: saving ? 0.6 : 1,
                 }}>
-                {saving ? "Saving..." : "Save Draft"}
+                {saving ? "..." : isMobile ? "Save" : "Save Draft"}
               </button>
               <button onClick={handleSaveAndFinalize} disabled={saving || finalizing}
                 style={{
                   background: finalizing ? "var(--bg3)" : "linear-gradient(135deg,#F59E0B,#D97706)",
                   border: "none", borderRadius: 8, color: "#fff", cursor: finalizing ? "not-allowed" : "pointer",
-                  padding: "5px 14px", fontSize: 12, fontWeight: 600, opacity: finalizing ? 0.6 : 1,
+                  padding: isMobile ? "5px 10px" : "5px 14px", fontSize: isMobile ? 11 : 12, fontWeight: 600, opacity: finalizing ? 0.6 : 1,
                 }}>
-                {finalizing ? "Finalizing..." : "\u{1F4E8} Save & Finalize"}
+                {finalizing ? "..." : isMobile ? "Finalize" : "\u{1F4E8} Save & Finalize"}
               </button>
             </>
           )}

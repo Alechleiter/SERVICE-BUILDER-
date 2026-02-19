@@ -470,7 +470,7 @@ export default function SavedProposalPage() {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", width: isMobile ? "100%" : "auto", justifyContent: isMobile ? "flex-start" : "flex-end" }}>
           {!isMobile && (
             <select
               value={selectedClientId}
@@ -489,9 +489,9 @@ export default function SavedProposalPage() {
           <button onClick={handleSave} disabled={saving} style={{
             background: saving ? "var(--bg3)" : "var(--gradientPrimary, linear-gradient(135deg,#10b981,#059669))",
             border: "none", borderRadius: 8, color: "#fff", cursor: saving ? "not-allowed" : "pointer",
-            padding: "5px 14px", fontSize: 12, fontWeight: 600, opacity: saving ? 0.6 : 1,
+            padding: isMobile ? "5px 10px" : "5px 14px", fontSize: isMobile ? 11 : 12, fontWeight: 600, opacity: saving ? 0.6 : 1,
           }}>
-            {saving ? "Saving..." : "Save"}
+            {saving ? "..." : "Save"}
           </button>
           <button onClick={handleFinalize} disabled={finalizing} style={{
             background: finalizing
@@ -500,9 +500,9 @@ export default function SavedProposalPage() {
                 ? "linear-gradient(135deg,#10b981,#059669)"
                 : "linear-gradient(135deg,#F59E0B,#D97706)",
             border: "none", borderRadius: 8, color: "#fff", cursor: finalizing ? "not-allowed" : "pointer",
-            padding: "5px 14px", fontSize: 12, fontWeight: 600, opacity: finalizing ? 0.6 : 1,
+            padding: isMobile ? "5px 10px" : "5px 14px", fontSize: isMobile ? 11 : 12, fontWeight: 600, opacity: finalizing ? 0.6 : 1,
           }}>
-            {finalizing ? "Finalizing..." : finalizedVersion ? `\u2713 v${finalizedVersion}` : "\u{1F4E8} Finalize"}
+            {finalizing ? "..." : finalizedVersion ? `\u2713 v${finalizedVersion}` : isMobile ? "Finalize" : "\u{1F4E8} Finalize"}
           </button>
           {(["form", "preview"] as const).map((tab) => (
             <button key={tab} onClick={() => { setActiveTab(tab); if (tab === "preview") setOpenSectionIndex(null); }}
@@ -510,7 +510,7 @@ export default function SavedProposalPage() {
                 background: activeTab === tab ? "var(--bg3)" : "transparent",
                 border: `1px solid ${activeTab === tab ? "var(--border3)" : "transparent"}`,
                 borderRadius: 8, color: activeTab === tab ? "var(--text)" : "var(--text4)",
-                cursor: "pointer", padding: isMobile ? "5px 10px" : "5px 14px", fontSize: 12, fontWeight: 600,
+                cursor: "pointer", padding: isMobile ? "5px 10px" : "5px 14px", fontSize: isMobile ? 11 : 12, fontWeight: 600,
               }}>
               {tab === "form" ? "\u270F\uFE0F Edit" : "\u{1F441}\uFE0F Preview"}
             </button>
