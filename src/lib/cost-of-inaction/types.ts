@@ -9,6 +9,8 @@ export interface CostCategory {
   description: string;
   defaultAmount: number;
   icon: string;
+  /** Research-backed rationale for the default amount */
+  rationale?: string;
 }
 
 /** An industry preset with its default cost categories */

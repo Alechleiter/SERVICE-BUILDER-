@@ -265,7 +265,7 @@ export default function SavedCalculationPage() {
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
             {entries.map((e) => (
-              <CostInputRow key={e.categoryId} entry={e} onAmountChange={handleAmountChange} onToggle={handleToggle} accentColor={preset.color} />
+              <CostInputRow key={e.categoryId} entry={e} onAmountChange={handleAmountChange} onToggle={handleToggle} accentColor={preset.color} rationale={preset.categories.find((c) => c.id === e.categoryId)?.rationale} />
             ))}
             {customEntries.map((e) => (
               <CostInputRow key={e.categoryId} entry={e} onAmountChange={handleAmountChange} onToggle={handleToggle} onRemove={handleRemoveCustom} accentColor={preset.color} />
