@@ -483,21 +483,19 @@ export default function SavedProposalPage() {
         )}
 
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", width: isMobile ? "100%" : "auto", justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-          {!isMobile && (
-            <select
-              value={selectedClientId}
-              onChange={(e) => setSelectedClientId(e.target.value)}
-              style={{
-                background: "var(--bg3)", border: "1px solid var(--border3)", borderRadius: 8,
-                color: "var(--text)", padding: "5px 10px", fontSize: 12, fontFamily: SANS,
-                cursor: "pointer", maxWidth: 160,
-              }}>
-              <option value="">— No Client —</option>
-              {clientsList.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          )}
+          <select
+            value={selectedClientId}
+            onChange={(e) => setSelectedClientId(e.target.value)}
+            style={{
+              background: "var(--bg3)", border: "1px solid var(--border3)", borderRadius: 8,
+              color: "var(--text)", padding: "5px 10px", fontSize: isMobile ? 11 : 12, fontFamily: SANS,
+              cursor: "pointer", maxWidth: isMobile ? 120 : 160,
+            }}>
+            <option value="">— No Client —</option>
+            {clientsList.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
           <button onClick={handleSave} disabled={saving} style={{
             background: saving ? "var(--bg3)" : "var(--gradientPrimary, linear-gradient(135deg,#10b981,#059669))",
             border: "none", borderRadius: 8, color: "#fff", cursor: saving ? "not-allowed" : "pointer",

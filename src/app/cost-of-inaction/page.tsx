@@ -305,15 +305,30 @@ export default function CostOfInactionPage() {
             </button>
           ))}
           {user && (
-            <button onClick={handleSave} disabled={saving}
-              style={{
-                background: saving ? "var(--bg3)" : "#1a1a1a",
-                border: "none", borderRadius: 16, color: "#fff", cursor: saving ? "not-allowed" : "pointer",
-                padding: isMobile ? "6px 12px" : "6px 16px", fontSize: 10, fontWeight: 700, opacity: saving ? 0.6 : 1,
-                textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: SANS,
-              }}>
-              {saving ? "..." : "Save"}
-            </button>
+            <>
+              <select
+                value={selectedClientId}
+                onChange={(e) => setSelectedClientId(e.target.value)}
+                style={{
+                  background: "var(--bg3)", border: "1px solid var(--border3)", borderRadius: 8,
+                  color: "var(--text)", padding: "5px 10px", fontSize: isMobile ? 10 : 11, fontFamily: SANS,
+                  cursor: "pointer", maxWidth: isMobile ? 110 : 150,
+                }}>
+                <option value="">— No Client —</option>
+                {clientsList.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button onClick={handleSave} disabled={saving}
+                style={{
+                  background: saving ? "var(--bg3)" : "#1a1a1a",
+                  border: "none", borderRadius: 16, color: "#fff", cursor: saving ? "not-allowed" : "pointer",
+                  padding: isMobile ? "6px 12px" : "6px 16px", fontSize: 10, fontWeight: 700, opacity: saving ? 0.6 : 1,
+                  textTransform: "uppercase", letterSpacing: "0.15em", fontFamily: SANS,
+                }}>
+                {saving ? "..." : "Save"}
+              </button>
+            </>
           )}
           <ExportMenu
             getHtml={getExportHtml}
