@@ -23,6 +23,7 @@ export default function ClientSelector({
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [justCreated, setJustCreated] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -44,6 +45,13 @@ export default function ClientSelector({
     return () => document.removeEventListener("mousedown", handler);
   }, [creating]);
 
+  // Brief green flash after creating a client
+  useEffect(() => {
+    if (!justCreated) return;
+    const t = setTimeout(() => setJustCreated(false), 2000);
+    return () => clearTimeout(t);
+  }, [justCreated]);
+
   const handleCreate = async () => {
     const trimmed = newName.trim();
     if (!trimmed || saving) return;
@@ -54,6 +62,7 @@ export default function ClientSelector({
       onSelect(newId);
       setCreating(false);
       setNewName("");
+      setJustCreated(true);
     }
   };
 
@@ -65,6 +74,8 @@ export default function ClientSelector({
     }
   };
 
+  const hasClient = !!selectedClientId;
+
   return (
     <div ref={wrapperRef} style={{ position: "relative", display: "inline-flex" }}>
       {!creating ? (
@@ -72,15 +83,17 @@ export default function ClientSelector({
           value={selectedClientId}
           onChange={(e) => handleSelectChange(e.target.value)}
           style={{
-            background: "var(--bg3)",
-            border: "1px solid var(--border3)",
+            background: hasClient ? "rgba(16,185,129,0.08)" : "var(--bg3)",
+            border: `1px solid ${justCreated ? "#10b981" : hasClient ? "rgba(16,185,129,0.3)" : "var(--border3)"}`,
             borderRadius: 8,
-            color: "var(--text)",
+            color: hasClient ? "var(--text)" : "var(--text4)",
             padding: "5px 10px",
             fontSize: isMobile ? 11 : 12,
             fontFamily: SANS,
+            fontWeight: hasClient ? 600 : 400,
             cursor: "pointer",
-            maxWidth: isMobile ? 120 : 160,
+            maxWidth: isMobile ? 130 : 170,
+            transition: "all 0.2s",
           }}
         >
           <option value="">— No Client —</option>
