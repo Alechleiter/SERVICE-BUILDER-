@@ -126,7 +126,14 @@ export default function ProposalGeneratorPage() {
   useEffect(() => {
     if (user) {
       listProposals().then((items) => setSavedProposals(items.filter((p) => p.template_id !== "cost_of_inaction")));
-      listClients().then((items) => setClientsList(items));
+      listClients().then((items) => {
+        setClientsList(items);
+        // Pre-select client from ?clientId query param
+        const qClientId = new URLSearchParams(window.location.search).get("clientId");
+        if (qClientId && items.some((c) => c.id === qClientId)) {
+          setSelectedClientId(qClientId);
+        }
+      });
     }
   }, [user, listProposals, listClients]);
 

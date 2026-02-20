@@ -319,6 +319,39 @@ export interface Database {
         ];
       };
 
+      client_activities: {
+        Row: {
+          id: string;
+          user_id: string;
+          client_id: string;
+          type: string;
+          content: string;
+          follow_up_date: string | null;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          client_id: string;
+          type?: string;
+          content: string;
+          follow_up_date?: string | null;
+        };
+        Update: {
+          type?: string;
+          content?: string;
+          follow_up_date?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "client_activities_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+
       proposal_photos: {
         Row: {
           id: string;
@@ -389,3 +422,5 @@ export type ProposalPhoto = Database["public"]["Tables"]["proposal_photos"]["Row
 export type ProposalPhotoInsert = Database["public"]["Tables"]["proposal_photos"]["Insert"];
 export type ProposalSnapshot = Database["public"]["Tables"]["proposal_snapshots"]["Row"];
 export type ProposalSnapshotInsert = Database["public"]["Tables"]["proposal_snapshots"]["Insert"];
+export type ClientActivity = Database["public"]["Tables"]["client_activities"]["Row"];
+export type ClientActivityInsert = Database["public"]["Tables"]["client_activities"]["Insert"];

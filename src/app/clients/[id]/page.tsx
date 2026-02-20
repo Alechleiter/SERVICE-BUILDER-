@@ -1,11 +1,12 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useClients } from "@/hooks/useClients";
 import { useProposals, type ProposalListItem } from "@/hooks/useProposals";
+import { useClientActivities } from "@/hooks/useClientActivities";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import type { Client } from "@/lib/supabase/database.types";
+import type { Client, ClientActivity } from "@/lib/supabase/database.types";
 import { TEMPLATES } from "@/lib/proposals/templates";
 
 const VERTICALS = [
@@ -22,7 +23,14 @@ const VERTICALS = [
 const SANS = "'Inter','DM Sans',sans-serif";
 const MONO = "'DM Mono',monospace";
 
-/** Map template_id to a human-readable name + icon */
+const ACTIVITY_TYPES = [
+  { id: "note", label: "Note", icon: "\u{1F4DD}" },
+  { id: "call", label: "Call", icon: "\u{1F4DE}" },
+  { id: "visit", label: "Site Visit", icon: "\u{1F3E2}" },
+  { id: "email", label: "Email", icon: "\u{2709}\uFE0F" },
+  { id: "follow_up", label: "Follow-up", icon: "\u{1F4C5}" },
+];
+
 function templateMeta(templateId: string): { name: string; icon: string; color: string } {
   if (templateId === "cost_of_inaction") {
     return { name: "Cost of Inaction", icon: "\u{1F4C9}", color: "#dc2626" };
@@ -32,7 +40,6 @@ function templateMeta(templateId: string): { name: string; icon: string; color: 
   return { name: templateId, icon: "\u{1F4C4}", color: "#666" };
 }
 
-/** Route for opening a proposal/COI */
 function proposalRoute(p: ProposalListItem): string {
   if (p.template_id === "cost_of_inaction") return `/cost-of-inaction/${p.id}`;
   return `/proposals/${p.id}`;
@@ -51,9 +58,11 @@ export default function ClientDetailPage() {
   const { user } = useAuth();
   const { get: getClient, save: saveClient } = useClients();
   const { listByClient, updateBucket } = useProposals();
+  const { activities, loading: loadingActivities, list: listActivities, add: addActivity, remove: removeActivity } = useClientActivities();
   const isMobile = useIsMobile(768);
 
   const clientId = params.id as string;
+  const activityInputRef = useRef<HTMLTextAreaElement>(null);
 
   const [client, setClient] = useState<Client | null>(null);
   const [clientProposals, setClientProposals] = useState<ProposalListItem[]>([]);
@@ -67,11 +76,17 @@ export default function ClientDetailPage() {
   });
 
   // Bucket UI
-  const [activeBucket, setActiveBucket] = useState<string | null>(null); // null = "All"
+  const [activeBucket, setActiveBucket] = useState<string | null>(null);
   const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set());
-  const [bucketDropdownOpen, setBucketDropdownOpen] = useState<string | null>(null); // proposal id
+  const [bucketDropdownOpen, setBucketDropdownOpen] = useState<string | null>(null);
   const [newBucketName, setNewBucketName] = useState("");
-  const [creatingBucketFor, setCreatingBucketFor] = useState<string | null>(null); // proposal id
+  const [creatingBucketFor, setCreatingBucketFor] = useState<string | null>(null);
+
+  // Activity form
+  const [showActivityForm, setShowActivityForm] = useState(false);
+  const [activityType, setActivityType] = useState("note");
+  const [activityContent, setActivityContent] = useState("");
+  const [activityFollowUp, setActivityFollowUp] = useState("");
 
   // ── Load data ──────────────────────────────────────────────
   const fetchClient = useCallback(async () => {
@@ -101,12 +116,18 @@ export default function ClientDetailPage() {
     setLoadingProposals(false);
   }, [user, clientId, listByClient]);
 
+  const fetchActivities = useCallback(async () => {
+    if (!user || !clientId) return;
+    await listActivities(clientId);
+  }, [user, clientId, listActivities]);
+
   useEffect(() => {
     fetchClient();
     fetchProposals();
-  }, [fetchClient, fetchProposals]);
+    fetchActivities();
+  }, [fetchClient, fetchProposals, fetchActivities]);
 
-  // ── Derived: bucket list & grouped proposals ───────────────
+  // ── Derived data ───────────────────────────────────────────
   const buckets = useMemo(() => {
     const set = new Set<string>();
     clientProposals.forEach((p) => { if (p.bucket) set.add(p.bucket); });
@@ -119,7 +140,6 @@ export default function ClientDetailPage() {
     return clientProposals.filter((p) => p.bucket === activeBucket);
   }, [clientProposals, activeBucket]);
 
-  /** Group proposals by bucket for the "All" view */
   const groupedByBucket = useMemo(() => {
     const groups: Record<string, ProposalListItem[]> = {};
     groups["Uncategorized"] = [];
@@ -131,6 +151,24 @@ export default function ClientDetailPage() {
     }
     return groups;
   }, [clientProposals, buckets]);
+
+  // Follow-up reminders
+  const overdueFollowUps = useMemo(() => {
+    const today = new Date().toISOString().split("T")[0];
+    return activities.filter((a) => a.follow_up_date && a.follow_up_date <= today);
+  }, [activities]);
+
+  const lastActivity = useMemo(() => {
+    return activities.length > 0 ? activities[0] : null;
+  }, [activities]);
+
+  const nextFollowUp = useMemo(() => {
+    const today = new Date().toISOString().split("T")[0];
+    const future = activities
+      .filter((a) => a.follow_up_date && a.follow_up_date > today)
+      .sort((a, b) => (a.follow_up_date! < b.follow_up_date! ? -1 : 1));
+    return future.length > 0 ? future[0].follow_up_date : null;
+  }, [activities]);
 
   // ── Handlers ───────────────────────────────────────────────
   const handleSaveInfo = async () => {
@@ -172,52 +210,57 @@ export default function ClientDetailPage() {
     });
   };
 
+  const handleAddActivity = async () => {
+    if (!activityContent.trim()) return;
+    await addActivity(clientId, activityType, activityContent.trim(), activityFollowUp || null);
+    setActivityContent("");
+    setActivityFollowUp("");
+    setActivityType("note");
+    setShowActivityForm(false);
+    fetchActivities();
+  };
+
+  const handleDeleteActivity = async (id: string) => {
+    if (!confirm("Delete this activity?")) return;
+    await removeActivity(id);
+    fetchActivities();
+  };
+
+  const openActivityForm = (type?: string) => {
+    setShowActivityForm(true);
+    if (type) setActivityType(type);
+    setTimeout(() => activityInputRef.current?.focus(), 100);
+  };
+
   // ── Styles ─────────────────────────────────────────────────
   const pillBase: React.CSSProperties = {
-    padding: "5px 14px",
-    borderRadius: 20,
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: "pointer",
-    border: "1px solid transparent",
-    fontFamily: SANS,
-    transition: "all 0.15s",
-    whiteSpace: "nowrap",
+    padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+    cursor: "pointer", border: "1px solid transparent", fontFamily: SANS,
+    transition: "all 0.15s", whiteSpace: "nowrap",
   };
 
   const cardStyle: React.CSSProperties = {
-    background: "var(--bg2)",
-    border: "1px solid var(--border2)",
-    borderRadius: 10,
-    padding: "14px 16px",
-    cursor: "pointer",
-    transition: "all 0.15s",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
+    background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 10,
+    padding: "14px 16px", cursor: "pointer", transition: "all 0.15s",
+    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
   };
 
   const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "8px 10px",
-    background: "var(--bg3)",
-    border: "1px solid var(--border2)",
-    borderRadius: 6,
-    color: "var(--text)",
-    fontSize: 12,
-    fontFamily: SANS,
-    outline: "none",
-    boxSizing: "border-box",
+    width: "100%", padding: "8px 10px", background: "var(--bg3)",
+    border: "1px solid var(--border2)", borderRadius: 6, color: "var(--text)",
+    fontSize: 12, fontFamily: SANS, outline: "none", boxSizing: "border-box",
   };
 
   const labelStyle: React.CSSProperties = {
-    fontSize: 10,
-    fontWeight: 600,
-    color: "var(--text4)",
-    marginBottom: 3,
-    textTransform: "uppercase",
-    letterSpacing: "0.4px",
+    fontSize: 10, fontWeight: 600, color: "var(--text4)", marginBottom: 3,
+    textTransform: "uppercase", letterSpacing: "0.4px",
+  };
+
+  const quickActionBtn: React.CSSProperties = {
+    padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+    cursor: "pointer", fontFamily: SANS, border: "1px solid var(--border3)",
+    background: "var(--bg2)", color: "var(--text)", transition: "all 0.15s",
+    display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
   };
 
   // ── Render ─────────────────────────────────────────────────
@@ -326,8 +369,25 @@ export default function ClientDetailPage() {
     <div style={{ minHeight: "calc(100vh - 48px)", background: "var(--bg)", color: "var(--text)", fontFamily: SANS, padding: isMobile ? "20px 16px" : "32px 24px" }}>
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
 
+        {/* ── Follow-up Banner ───────────────────────────── */}
+        {overdueFollowUps.length > 0 && (
+          <div style={{
+            background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)",
+            borderRadius: 10, padding: "12px 18px", marginBottom: 16, display: "flex",
+            alignItems: "center", gap: 10, fontSize: 13, color: "#ca8a04",
+          }}>
+            <span style={{ fontSize: 18 }}>{"\u26A0\uFE0F"}</span>
+            <div>
+              <strong>{overdueFollowUps.length} follow-up{overdueFollowUps.length !== 1 ? "s" : ""} due</strong>
+              {" \u2014 "}
+              {overdueFollowUps.slice(0, 2).map((a) => a.content.substring(0, 40)).join("; ")}
+              {overdueFollowUps.length > 2 && ` +${overdueFollowUps.length - 2} more`}
+            </div>
+          </div>
+        )}
+
         {/* ── Back + Title ───────────────────────────────── */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
           <button
             onClick={() => router.push("/clients")}
             style={{
@@ -358,6 +418,28 @@ export default function ClientDetailPage() {
             }}
           >
             {editingInfo ? "Cancel" : "Edit Info"}
+          </button>
+        </div>
+
+        {/* ── Quick Actions ──────────────────────────────── */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          <button
+            onClick={() => router.push(`/proposals?clientId=${clientId}`)}
+            style={{ ...quickActionBtn, background: "var(--gradientPrimary, linear-gradient(135deg,#10b981,#059669))", color: "#fff", borderColor: "transparent" }}
+          >
+            {"\u{1F4C4}"} New Proposal
+          </button>
+          <button
+            onClick={() => router.push(`/cost-of-inaction?clientId=${clientId}`)}
+            style={quickActionBtn}
+          >
+            {"\u{1F4C9}"} New COI
+          </button>
+          <button onClick={() => openActivityForm("note")} style={quickActionBtn}>
+            {"\u{1F4DD}"} Add Note
+          </button>
+          <button onClick={() => openActivityForm("call")} style={quickActionBtn}>
+            {"\u{1F4DE}"} Log Call
           </button>
         </div>
 
@@ -410,7 +492,7 @@ export default function ClientDetailPage() {
         )}
 
         {/* ── Quick info row (non-editing) ────────────────── */}
-        {!editingInfo && (client.contact_name || client.notes) && (
+        {!editingInfo && (client.contact_name || client.contact_email || client.contact_phone || client.notes) && (
           <div style={{
             background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 12,
             padding: "14px 18px", marginBottom: 24, display: "flex", gap: 24, flexWrap: "wrap", fontSize: 12,
@@ -419,8 +501,30 @@ export default function ClientDetailPage() {
               <div>
                 <span style={{ color: "var(--text5)", fontFamily: MONO, fontSize: 10 }}>CONTACT </span>
                 <span style={{ fontWeight: 600 }}>{client.contact_name}</span>
-                {client.contact_email && <span style={{ color: "var(--text4)" }}> &middot; {client.contact_email}</span>}
-                {client.contact_phone && <span style={{ color: "var(--text4)" }}> &middot; {client.contact_phone}</span>}
+                {client.contact_email && (
+                  <>
+                    {" \u00B7 "}
+                    <a href={`mailto:${client.contact_email}`} style={{ color: "var(--accent, #10b981)", textDecoration: "none" }}>{client.contact_email}</a>
+                  </>
+                )}
+                {client.contact_phone && (
+                  <>
+                    {" \u00B7 "}
+                    <a href={`tel:${client.contact_phone}`} style={{ color: "var(--accent, #10b981)", textDecoration: "none" }}>{client.contact_phone}</a>
+                  </>
+                )}
+              </div>
+            )}
+            {!client.contact_name && client.contact_email && (
+              <div>
+                <span style={{ color: "var(--text5)", fontFamily: MONO, fontSize: 10 }}>EMAIL </span>
+                <a href={`mailto:${client.contact_email}`} style={{ color: "var(--accent, #10b981)", textDecoration: "none", fontWeight: 600 }}>{client.contact_email}</a>
+              </div>
+            )}
+            {!client.contact_name && client.contact_phone && (
+              <div>
+                <span style={{ color: "var(--text5)", fontFamily: MONO, fontSize: 10 }}>PHONE </span>
+                <a href={`tel:${client.contact_phone}`} style={{ color: "var(--accent, #10b981)", textDecoration: "none", fontWeight: 600 }}>{client.contact_phone}</a>
               </div>
             )}
             {client.notes && (
@@ -433,66 +537,77 @@ export default function ClientDetailPage() {
 
         {/* ── Stats row ──────────────────────────────────── */}
         <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-          <div style={{ background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 10, padding: "12px 18px", flex: 1, minWidth: 120 }}>
+          <div style={{ background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 10, padding: "12px 18px", flex: 1, minWidth: 100 }}>
             <div style={{ fontSize: 22, fontWeight: 800 }}>{clientProposals.length}</div>
-            <div style={{ fontSize: 11, color: "var(--text4)", fontFamily: MONO }}>TOTAL DOCUMENTS</div>
+            <div style={{ fontSize: 10, color: "var(--text4)", fontFamily: MONO }}>DOCUMENTS</div>
           </div>
-          <div style={{ background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 10, padding: "12px 18px", flex: 1, minWidth: 120 }}>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>{buckets.length}</div>
-            <div style={{ fontSize: 11, color: "var(--text4)", fontFamily: MONO }}>BUCKETS</div>
+          <div style={{ background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 10, padding: "12px 18px", flex: 1, minWidth: 100 }}>
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{activities.length}</div>
+            <div style={{ fontSize: 10, color: "var(--text4)", fontFamily: MONO }}>ACTIVITIES</div>
           </div>
-          <div style={{ background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 10, padding: "12px 18px", flex: 1, minWidth: 120 }}>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>{clientProposals.filter((p) => p.status === "sent" || p.status === "accepted").length}</div>
-            <div style={{ fontSize: 11, color: "var(--text4)", fontFamily: MONO }}>SENT / ACCEPTED</div>
+          <div style={{ background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 10, padding: "12px 18px", flex: 1, minWidth: 100 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: lastActivity ? "var(--text)" : "var(--text5)" }}>
+              {lastActivity ? timeAgo(lastActivity.created_at) : "None"}
+            </div>
+            <div style={{ fontSize: 10, color: "var(--text4)", fontFamily: MONO }}>LAST ACTIVITY</div>
+          </div>
+          <div style={{ background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 10, padding: "12px 18px", flex: 1, minWidth: 100 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: nextFollowUp ? "#ca8a04" : "var(--text5)" }}>
+              {nextFollowUp ? new Date(nextFollowUp + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "None"}
+            </div>
+            <div style={{ fontSize: 10, color: "var(--text4)", fontFamily: MONO }}>NEXT FOLLOW-UP</div>
           </div>
         </div>
 
         {/* ── Bucket filter pills ────────────────────────── */}
         {clientProposals.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
-            <button
-              onClick={() => setActiveBucket(null)}
-              style={{
-                ...pillBase,
-                background: activeBucket === null ? "var(--accent, #10b981)" : "var(--bg3)",
-                color: activeBucket === null ? "#fff" : "var(--text4)",
-                borderColor: activeBucket === null ? "var(--accent, #10b981)" : "var(--border3)",
-              }}
-            >
-              All ({clientProposals.length})
-            </button>
-            {buckets.map((b) => {
-              const count = clientProposals.filter((p) => p.bucket === b).length;
-              return (
-                <button
-                  key={b}
-                  onClick={() => setActiveBucket(activeBucket === b ? null : b)}
-                  style={{
-                    ...pillBase,
-                    background: activeBucket === b ? "var(--accent, #10b981)" : "var(--bg3)",
-                    color: activeBucket === b ? "#fff" : "var(--text4)",
-                    borderColor: activeBucket === b ? "var(--accent, #10b981)" : "var(--border3)",
-                  }}
-                >
-                  {b} ({count})
-                </button>
-              );
-            })}
-            {clientProposals.some((p) => !p.bucket) && (
+          <>
+            <h3 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 700 }}>{"\u{1F4C1}"} Documents</h3>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
               <button
-                onClick={() => setActiveBucket(activeBucket === "__none__" ? null : "__none__")}
+                onClick={() => setActiveBucket(null)}
                 style={{
                   ...pillBase,
-                  background: activeBucket === "__none__" ? "var(--bg3)" : "transparent",
-                  color: "var(--text5)",
-                  borderColor: activeBucket === "__none__" ? "var(--border3)" : "transparent",
-                  fontStyle: "italic",
+                  background: activeBucket === null ? "var(--accent, #10b981)" : "var(--bg3)",
+                  color: activeBucket === null ? "#fff" : "var(--text4)",
+                  borderColor: activeBucket === null ? "var(--accent, #10b981)" : "var(--border3)",
                 }}
               >
-                Uncategorized ({clientProposals.filter((p) => !p.bucket).length})
+                All ({clientProposals.length})
               </button>
-            )}
-          </div>
+              {buckets.map((b) => {
+                const count = clientProposals.filter((p) => p.bucket === b).length;
+                return (
+                  <button
+                    key={b}
+                    onClick={() => setActiveBucket(activeBucket === b ? null : b)}
+                    style={{
+                      ...pillBase,
+                      background: activeBucket === b ? "var(--accent, #10b981)" : "var(--bg3)",
+                      color: activeBucket === b ? "#fff" : "var(--text4)",
+                      borderColor: activeBucket === b ? "var(--accent, #10b981)" : "var(--border3)",
+                    }}
+                  >
+                    {b} ({count})
+                  </button>
+                );
+              })}
+              {clientProposals.some((p) => !p.bucket) && (
+                <button
+                  onClick={() => setActiveBucket(activeBucket === "__none__" ? null : "__none__")}
+                  style={{
+                    ...pillBase,
+                    background: activeBucket === "__none__" ? "var(--bg3)" : "transparent",
+                    color: "var(--text5)",
+                    borderColor: activeBucket === "__none__" ? "var(--border3)" : "transparent",
+                    fontStyle: "italic",
+                  }}
+                >
+                  Uncategorized ({clientProposals.filter((p) => !p.bucket).length})
+                </button>
+              )}
+            </div>
+          </>
         )}
 
         {/* ── Proposals ──────────────────────────────────── */}
@@ -502,35 +617,19 @@ export default function ClientDetailPage() {
 
         {!loadingProposals && clientProposals.length === 0 && (
           <div style={{
-            textAlign: "center", padding: "60px 20px", background: "var(--bg2)",
-            borderRadius: 14, border: "1px solid var(--border2)",
+            textAlign: "center", padding: "40px 20px", background: "var(--bg2)",
+            borderRadius: 14, border: "1px solid var(--border2)", marginBottom: 32,
           }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>{"\u{1F4C2}"}</div>
-            <p style={{ color: "var(--text4)", fontSize: 14, margin: "0 0 16px" }}>
-              No documents saved to this client yet.
+            <div style={{ fontSize: 32, marginBottom: 8 }}>{"\u{1F4C2}"}</div>
+            <p style={{ color: "var(--text4)", fontSize: 13, margin: 0 }}>
+              No documents yet. Use the quick actions above to create one.
             </p>
-            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-              <a href="/proposals" style={{
-                display: "inline-block", padding: "8px 18px",
-                background: "var(--gradientPrimary, linear-gradient(135deg,#10b981,#059669))",
-                borderRadius: 8, color: "#fff", fontWeight: 600, fontSize: 13, textDecoration: "none",
-              }}>
-                Create Proposal
-              </a>
-              <a href="/cost-of-inaction" style={{
-                display: "inline-block", padding: "8px 18px",
-                background: "var(--bg3)", border: "1px solid var(--border3)",
-                borderRadius: 8, color: "var(--text4)", fontSize: 13, textDecoration: "none",
-              }}>
-                COI Calculator
-              </a>
-            </div>
           </div>
         )}
 
-        {/* ── Grouped view (when "All" selected) ──────────── */}
+        {/* Grouped view */}
         {!loadingProposals && activeBucket === null && clientProposals.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20, marginBottom: 32 }}>
             {Object.entries(groupedByBucket).map(([bucketName, items]) => {
               if (items.length === 0) return null;
               const isCollapsed = collapsedBuckets.has(bucketName);
@@ -541,8 +640,7 @@ export default function ClientDetailPage() {
                     style={{
                       display: "flex", alignItems: "center", gap: 8, width: "100%",
                       background: "none", border: "none", cursor: "pointer", padding: "0 0 8px",
-                      color: "var(--text)", fontFamily: SANS, fontSize: 14, fontWeight: 700,
-                      textAlign: "left",
+                      color: "var(--text)", fontFamily: SANS, fontSize: 14, fontWeight: 700, textAlign: "left",
                     }}
                   >
                     <span style={{ transition: "transform 0.2s", transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)", fontSize: 12 }}>{"\u25BC"}</span>
@@ -560,17 +658,168 @@ export default function ClientDetailPage() {
           </div>
         )}
 
-        {/* ── Filtered view (specific bucket selected) ────── */}
+        {/* Filtered view */}
         {!loadingProposals && activeBucket !== null && filteredProposals.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 32 }}>
             {filteredProposals.map(renderProposalCard)}
           </div>
         )}
         {!loadingProposals && activeBucket !== null && filteredProposals.length === 0 && clientProposals.length > 0 && (
-          <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text4)", fontSize: 13 }}>
+          <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text4)", fontSize: 13, marginBottom: 32 }}>
             No documents in this bucket.
           </div>
         )}
+
+        {/* ── Activity Timeline ──────────────────────────── */}
+        <div style={{ borderTop: "1px solid var(--border2)", paddingTop: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{"\u{1F4CB}"} Activity Log</h3>
+            {!showActivityForm && (
+              <button
+                onClick={() => openActivityForm()}
+                style={{
+                  padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                  cursor: "pointer", fontFamily: SANS, border: "1px solid var(--border3)",
+                  background: "var(--bg2)", color: "var(--text4)",
+                }}
+              >
+                + Add Activity
+              </button>
+            )}
+          </div>
+
+          {/* Add activity form */}
+          {showActivityForm && (
+            <div style={{
+              background: "var(--glass, var(--bg2))", border: "1px solid var(--glassBorder, var(--border2))",
+              borderRadius: 12, padding: 16, marginBottom: 16,
+            }}>
+              <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+                {ACTIVITY_TYPES.map((at) => (
+                  <button
+                    key={at.id}
+                    onClick={() => setActivityType(at.id)}
+                    style={{
+                      ...pillBase, padding: "4px 12px", fontSize: 11,
+                      background: activityType === at.id ? "var(--accent, #10b981)" : "var(--bg3)",
+                      color: activityType === at.id ? "#fff" : "var(--text4)",
+                      borderColor: activityType === at.id ? "var(--accent, #10b981)" : "var(--border3)",
+                    }}
+                  >
+                    {at.icon} {at.label}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                ref={activityInputRef}
+                value={activityContent}
+                onChange={(e) => setActivityContent(e.target.value)}
+                placeholder={activityType === "call" ? "Call notes..." : activityType === "visit" ? "Site visit notes..." : "What happened?"}
+                rows={3}
+                style={{ ...inputStyle, resize: "vertical", marginBottom: 10 }}
+              />
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 11, color: "var(--text4)", fontFamily: MONO }}>FOLLOW-UP:</span>
+                  <input
+                    type="date"
+                    value={activityFollowUp}
+                    onChange={(e) => setActivityFollowUp(e.target.value)}
+                    style={{ ...inputStyle, width: "auto", padding: "4px 8px" }}
+                  />
+                </div>
+                <div style={{ flex: 1 }} />
+                <button onClick={() => { setShowActivityForm(false); setActivityContent(""); setActivityFollowUp(""); }} style={{
+                  padding: "6px 14px", borderRadius: 6, fontSize: 12, background: "var(--bg3)",
+                  border: "1px solid var(--border3)", color: "var(--text4)", cursor: "pointer", fontFamily: SANS,
+                }}>
+                  Cancel
+                </button>
+                <button onClick={handleAddActivity} style={{
+                  padding: "6px 14px", borderRadius: 6, fontSize: 12,
+                  background: "var(--gradientPrimary, linear-gradient(135deg,#10b981,#059669))",
+                  border: "none", color: "#fff", cursor: "pointer", fontFamily: SANS, fontWeight: 600,
+                }}>
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Activity list */}
+          {loadingActivities && (
+            <p style={{ textAlign: "center", color: "var(--text4)", fontSize: 13, padding: 20 }}>Loading activities...</p>
+          )}
+
+          {!loadingActivities && activities.length === 0 && !showActivityForm && (
+            <div style={{
+              textAlign: "center", padding: "40px 20px", background: "var(--bg2)",
+              borderRadius: 12, border: "1px solid var(--border2)",
+            }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>{"\u{1F4DD}"}</div>
+              <p style={{ color: "var(--text4)", fontSize: 13, margin: 0 }}>
+                No activity yet. Log a note, call, or site visit.
+              </p>
+            </div>
+          )}
+
+          {activities.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {activities.map((a, i) => {
+                const at = ACTIVITY_TYPES.find((t) => t.id === a.type) ?? ACTIVITY_TYPES[0];
+                const isOverdue = a.follow_up_date && a.follow_up_date <= new Date().toISOString().split("T")[0];
+                return (
+                  <div key={a.id} style={{ display: "flex", gap: 12 }}>
+                    {/* Timeline line + dot */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 24, flexShrink: 0 }}>
+                      <div style={{
+                        width: 28, height: 28, borderRadius: 14, background: "var(--bg2)",
+                        border: "2px solid var(--border2)", display: "flex", alignItems: "center",
+                        justifyContent: "center", fontSize: 13, flexShrink: 0,
+                      }}>
+                        {at.icon}
+                      </div>
+                      {i < activities.length - 1 && (
+                        <div style={{ width: 2, flex: 1, background: "var(--border2)", minHeight: 16 }} />
+                      )}
+                    </div>
+                    {/* Content */}
+                    <div style={{ flex: 1, paddingBottom: 16, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text)", textTransform: "uppercase" }}>{at.label}</span>
+                        <span style={{ fontSize: 10, color: "var(--text5)", fontFamily: MONO }}>{timeAgo(a.created_at)}</span>
+                        {a.follow_up_date && (
+                          <span style={{
+                            fontSize: 10, padding: "1px 6px", borderRadius: 8, fontFamily: MONO, fontWeight: 600,
+                            background: isOverdue ? "rgba(234,179,8,0.15)" : "rgba(59,130,246,0.1)",
+                            color: isOverdue ? "#ca8a04" : "#3b82f6",
+                          }}>
+                            {"\u{1F4C5}"} {new Date(a.follow_up_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ margin: 0, fontSize: 13, color: "var(--text)", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                        {a.content}
+                      </p>
+                      <button
+                        onClick={() => handleDeleteActivity(a.id)}
+                        style={{
+                          marginTop: 4, padding: "2px 8px", borderRadius: 4, fontSize: 10,
+                          background: "none", border: "none", color: "var(--text5)",
+                          cursor: "pointer", fontFamily: MONO,
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text5)"; }}
+                      >
+                        delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

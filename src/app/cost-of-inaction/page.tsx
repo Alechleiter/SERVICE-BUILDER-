@@ -83,7 +83,14 @@ export default function CostOfInactionPage() {
   useEffect(() => {
     if (!user) return;
     listCalcs().then(setSavedCalcs);
-    listClients().then(setClientsList);
+    listClients().then((items) => {
+      setClientsList(items);
+      // Pre-select client from ?clientId query param
+      const qClientId = new URLSearchParams(window.location.search).get("clientId");
+      if (qClientId && items.some((c) => c.id === qClientId)) {
+        setSelectedClientId(qClientId);
+      }
+    });
   }, [user, listCalcs, listClients]);
 
   // ── Handlers ──
