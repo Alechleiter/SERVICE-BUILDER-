@@ -18,6 +18,7 @@ import ProposalFormField from "@/components/proposals/ProposalFormField";
 import SectionList from "@/components/proposals/SectionList";
 import SectionPanel from "@/components/proposals/SectionPanel";
 import ExportMenu from "@/components/ExportMenu";
+import ClientSelector from "@/components/ClientSelector";
 import { exportWord } from "@/lib/export";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useKeyboardShortcuts, SHORTCUT_LIST } from "@/hooks/useKeyboardShortcuts";
@@ -39,7 +40,7 @@ export default function SavedProposalPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { load, save, finalize, saveError } = useProposals();
-  const { list: listClients } = useClients();
+  const { list: listClients, save: saveClient } = useClients();
   const [isMobile, mobileRef] = useIsMobile(768);
 
   const proposalId = params.id as string;
@@ -155,6 +156,15 @@ export default function SavedProposalPage() {
       setLoadingProposal(false);
     })();
   }, [user, proposalId, load, listClients]);
+
+  const handleCreateClient = useCallback(async (name: string): Promise<string | null> => {
+    const newId = await saveClient({ name });
+    if (newId) {
+      const updated = await listClients();
+      setClientsList(updated);
+    }
+    return newId;
+  }, [saveClient, listClients]);
 
   const handleSave = useCallback(async () => {
     if (!selectedTemplate) {
@@ -483,19 +493,13 @@ export default function SavedProposalPage() {
         )}
 
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", width: isMobile ? "100%" : "auto", justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-          <select
-            value={selectedClientId}
-            onChange={(e) => setSelectedClientId(e.target.value)}
-            style={{
-              background: "var(--bg3)", border: "1px solid var(--border3)", borderRadius: 8,
-              color: "var(--text)", padding: "5px 10px", fontSize: isMobile ? 11 : 12, fontFamily: SANS,
-              cursor: "pointer", maxWidth: isMobile ? 120 : 160,
-            }}>
-            <option value="">— No Client —</option>
-            {clientsList.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+          <ClientSelector
+            clients={clientsList}
+            selectedClientId={selectedClientId}
+            onSelect={setSelectedClientId}
+            onCreateClient={handleCreateClient}
+            isMobile={isMobile}
+          />
           <button onClick={handleSave} disabled={saving} style={{
             background: saving ? "var(--bg3)" : "var(--gradientPrimary, linear-gradient(135deg,#10b981,#059669))",
             border: "none", borderRadius: 8, color: "#fff", cursor: saving ? "not-allowed" : "pointer",

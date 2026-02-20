@@ -12,6 +12,7 @@ import { buildCOIExportHTML, buildCOIPlainText } from "@/lib/cost-of-inaction/ex
 import type { IndustryPreset, CostEntry, CalculationData } from "@/lib/cost-of-inaction/types";
 import type { ProposalListItem } from "@/hooks/useProposals";
 import type { Client } from "@/lib/supabase/database.types";
+import ClientSelector from "@/components/ClientSelector";
 import IndustryCard from "@/components/cost-of-inaction/IndustryCard";
 import CostInputRow from "@/components/cost-of-inaction/CostInputRow";
 import TimeframeSelector from "@/components/cost-of-inaction/TimeframeSelector";
@@ -39,7 +40,7 @@ export default function CostOfInactionPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { list: listCalcs, save, remove, saveError } = useCalculations();
-  const { list: listClients } = useClients();
+  const { list: listClients, save: saveClient } = useClients();
   const [isMobile, mobileRef] = useIsMobile(768);
 
   const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
@@ -94,6 +95,15 @@ export default function CostOfInactionPage() {
   }, [user, listCalcs, listClients]);
 
   // ── Handlers ──
+  const handleCreateClient = useCallback(async (name: string): Promise<string | null> => {
+    const newId = await saveClient({ name });
+    if (newId) {
+      const updated = await listClients();
+      setClientsList(updated);
+    }
+    return newId;
+  }, [saveClient, listClients]);
+
   const handleSelectIndustry = useCallback((id: string) => {
     const p = INDUSTRY_PRESETS[id];
     if (!p) return;
@@ -306,19 +316,13 @@ export default function CostOfInactionPage() {
           ))}
           {user && (
             <>
-              <select
-                value={selectedClientId}
-                onChange={(e) => setSelectedClientId(e.target.value)}
-                style={{
-                  background: "var(--bg3)", border: "1px solid var(--border3)", borderRadius: 8,
-                  color: "var(--text)", padding: "5px 10px", fontSize: isMobile ? 10 : 11, fontFamily: SANS,
-                  cursor: "pointer", maxWidth: isMobile ? 110 : 150,
-                }}>
-                <option value="">— No Client —</option>
-                {clientsList.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              <ClientSelector
+                clients={clientsList}
+                selectedClientId={selectedClientId}
+                onSelect={setSelectedClientId}
+                onCreateClient={handleCreateClient}
+                isMobile={isMobile}
+              />
               <button onClick={handleSave} disabled={saving}
                 style={{
                   background: saving ? "var(--bg3)" : "#1a1a1a",
