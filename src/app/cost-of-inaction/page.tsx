@@ -88,8 +88,12 @@ export default function CostOfInactionPage() {
       setClientsList(items);
       // Pre-select client from ?clientId query param
       const qClientId = new URLSearchParams(window.location.search).get("clientId");
-      if (qClientId && items.some((c) => c.id === qClientId)) {
-        setSelectedClientId(qClientId);
+      if (qClientId) {
+        const match = items.find((c) => c.id === qClientId);
+        if (match) {
+          setSelectedClientId(qClientId);
+          if (match.name) setPropertyName((prev) => prev.trim() ? prev : match.name);
+        }
       }
     });
   }, [user, listCalcs, listClients]);
@@ -103,6 +107,14 @@ export default function CostOfInactionPage() {
     }
     return newId;
   }, [saveClient, listClients]);
+
+  /** Auto-fill propertyName when client is selected */
+  const handleClientSelect = useCallback((clientId: string, client?: Client) => {
+    setSelectedClientId(clientId);
+    if (client?.name && !propertyName.trim()) {
+      setPropertyName(client.name);
+    }
+  }, [propertyName]);
 
   const handleSelectIndustry = useCallback((id: string) => {
     const p = INDUSTRY_PRESETS[id];
@@ -319,7 +331,7 @@ export default function CostOfInactionPage() {
               <ClientSelector
                 clients={clientsList}
                 selectedClientId={selectedClientId}
-                onSelect={setSelectedClientId}
+                onSelect={handleClientSelect}
                 onCreateClient={handleCreateClient}
                 isMobile={isMobile}
               />

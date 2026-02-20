@@ -7,7 +7,7 @@ const SANS = "'Inter','DM Sans',sans-serif";
 interface ClientSelectorProps {
   clients: Client[];
   selectedClientId: string;
-  onSelect: (clientId: string) => void;
+  onSelect: (clientId: string, client?: Client) => void;
   /** Called after a new client is created — returns the new client id */
   onCreateClient: (name: string) => Promise<string | null>;
   isMobile?: boolean;
@@ -59,7 +59,9 @@ export default function ClientSelector({
     const newId = await onCreateClient(trimmed);
     setSaving(false);
     if (newId) {
-      onSelect(newId);
+      // Build a minimal client object — only name is known at creation time
+      const newClient: Client = { id: newId, user_id: "", name: trimmed, address: null, contact_name: null, contact_email: null, contact_phone: null, vertical_id: null, notes: null, created_at: "", updated_at: "" };
+      onSelect(newId, newClient);
       setCreating(false);
       setNewName("");
       setJustCreated(true);
@@ -70,7 +72,8 @@ export default function ClientSelector({
     if (val === "__new__") {
       setCreating(true);
     } else {
-      onSelect(val);
+      const client = clients.find((c) => c.id === val);
+      onSelect(val, client);
     }
   };
 

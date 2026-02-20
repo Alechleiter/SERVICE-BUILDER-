@@ -19,6 +19,7 @@ import SectionList from "@/components/proposals/SectionList";
 import SectionPanel from "@/components/proposals/SectionPanel";
 import ExportMenu from "@/components/ExportMenu";
 import ClientSelector from "@/components/ClientSelector";
+import { getClientFieldMapping, mergeClientFields } from "@/lib/proposals/client-autofill";
 import { exportWord } from "@/lib/export";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useKeyboardShortcuts, SHORTCUT_LIST } from "@/hooks/useKeyboardShortcuts";
@@ -147,6 +148,15 @@ export default function ProposalGeneratorPage() {
     return newId;
   }, [saveClient, listClients]);
 
+  /** When a client is selected, auto-fill empty form fields with their saved info */
+  const handleClientSelect = useCallback((clientId: string, client?: Client) => {
+    setSelectedClientId(clientId);
+    if (client && selectedTemplate) {
+      const mapping = getClientFieldMapping(selectedTemplate, client);
+      setFormData((prev) => mergeClientFields(prev, mapping));
+    }
+  }, [selectedTemplate]);
+
   const handleSaveProposal = useCallback(async () => {
     if (!selectedTemplate) {
       alert("No template selected. Please select a template first.");
@@ -239,7 +249,10 @@ export default function ProposalGeneratorPage() {
 
   const handleTemplateSelect = (key: TemplateId) => {
     setSelectedTemplate(key);
-    setFormData({});
+    // Auto-fill from pre-selected client (e.g. came from CRM ?clientId)
+    const client = clientsList.find((c) => c.id === selectedClientId);
+    const seed = client ? mergeClientFields({}, getClientFieldMapping(key, client)) : {};
+    setFormData(seed);
     setPhotos([]);
     setInspectionDate("");
     setMapData(null);
@@ -614,7 +627,7 @@ export default function ProposalGeneratorPage() {
               <ClientSelector
                 clients={clientsList}
                 selectedClientId={selectedClientId}
-                onSelect={setSelectedClientId}
+                onSelect={handleClientSelect}
                 onCreateClient={handleCreateClient}
                 isMobile={isMobile}
               />

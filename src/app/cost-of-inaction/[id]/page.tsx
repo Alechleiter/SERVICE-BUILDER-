@@ -100,6 +100,14 @@ export default function SavedCalculationPage() {
     return newId;
   }, [saveClient, listClients]);
 
+  /** Auto-fill propertyName when client is changed */
+  const handleClientSelect = useCallback((clientId: string, client?: Client) => {
+    setSelectedClientId(clientId);
+    if (client?.name && !propertyName.trim()) {
+      setPropertyName(client.name);
+    }
+  }, [propertyName]);
+
   const handleAmountChange = useCallback((id: string, amount: number) => {
     setEntries((prev) => prev.map((e) => e.categoryId === id ? { ...e, amount } : e));
     setCustomEntries((prev) => prev.map((e) => e.categoryId === id ? { ...e, amount } : e));
@@ -220,7 +228,7 @@ export default function SavedCalculationPage() {
           <ClientSelector
             clients={clientsList}
             selectedClientId={selectedClientId}
-            onSelect={setSelectedClientId}
+            onSelect={handleClientSelect}
             onCreateClient={handleCreateClient}
             isMobile={isMobile}
           />

@@ -19,6 +19,7 @@ import SectionList from "@/components/proposals/SectionList";
 import SectionPanel from "@/components/proposals/SectionPanel";
 import ExportMenu from "@/components/ExportMenu";
 import ClientSelector from "@/components/ClientSelector";
+import { getClientFieldMapping, mergeClientFields } from "@/lib/proposals/client-autofill";
 import { exportWord } from "@/lib/export";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useKeyboardShortcuts, SHORTCUT_LIST } from "@/hooks/useKeyboardShortcuts";
@@ -165,6 +166,15 @@ export default function SavedProposalPage() {
     }
     return newId;
   }, [saveClient, listClients]);
+
+  /** Auto-fill empty form fields when user changes the client selection */
+  const handleClientSelect = useCallback((clientId: string, client?: Client) => {
+    setSelectedClientId(clientId);
+    if (client && selectedTemplate) {
+      const mapping = getClientFieldMapping(selectedTemplate, client);
+      setFormData((prev) => mergeClientFields(prev, mapping));
+    }
+  }, [selectedTemplate]);
 
   const handleSave = useCallback(async () => {
     if (!selectedTemplate) {
@@ -496,7 +506,7 @@ export default function SavedProposalPage() {
           <ClientSelector
             clients={clientsList}
             selectedClientId={selectedClientId}
-            onSelect={setSelectedClientId}
+            onSelect={handleClientSelect}
             onCreateClient={handleCreateClient}
             isMobile={isMobile}
           />
