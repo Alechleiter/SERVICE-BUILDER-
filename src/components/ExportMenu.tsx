@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { exportPDF, exportWord, copyToClipboard, printContent } from "@/lib/export";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 interface ExportMenuProps {
   /** Generates HTML. Pass `forWord: true` for Word-compatible output. */
@@ -23,13 +24,15 @@ export default function ExportMenu({
   title = "Proposal",
   buttonLabel = "Export",
   accentColor,
-  isMobile = false,
 }: ExportMenuProps) {
   const [open, setOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [isMobile] = useIsMobile(768);
 
+  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -38,6 +41,17 @@ export default function ExportMenu({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  // Reposition dropdown if it overflows viewport (desktop only)
+  useEffect(() => {
+    if (!open || isMobile || !dropdownRef.current) return;
+    const rect = dropdownRef.current.getBoundingClientRect();
+    if (rect.left < 8) {
+      // Overflowing left — shift right
+      dropdownRef.current.style.right = "auto";
+      dropdownRef.current.style.left = "0";
+    }
+  }, [open, isMobile]);
 
   const showFeedback = useCallback((msg: string) => {
     setFeedback(msg);
@@ -163,6 +177,48 @@ export default function ExportMenu({
     </button>
   );
 
+  const dropdownContent = (
+    <>
+      {/* Customer section header */}
+      {getInternalHtml && (
+        <div style={{
+          padding: "8px 16px 4px",
+          fontSize: "9px",
+          fontWeight: 700,
+          color: "var(--text5)",
+          textTransform: "uppercase",
+          letterSpacing: "1px",
+        }}>
+          Customer Version
+        </div>
+      )}
+
+      {customerOptions.map((opt, i) =>
+        renderOption(opt, i, !getInternalHtml && i === customerOptions.length - 1),
+      )}
+
+      {/* Internal section */}
+      {getInternalHtml && internalOptions.length > 0 && (
+        <>
+          <div style={{
+            padding: "8px 16px 4px",
+            fontSize: "9px",
+            fontWeight: 700,
+            color: "#F59E0B",
+            textTransform: "uppercase",
+            letterSpacing: "1px",
+            borderTop: "1px solid var(--border)",
+          }}>
+            Internal Version
+          </div>
+          {internalOptions.map((opt, i) =>
+            renderOption(opt, i, i === internalOptions.length - 1),
+          )}
+        </>
+      )}
+    </>
+  );
+
   return (
     <div ref={menuRef} style={{ position: "relative", display: "inline-flex" }}>
       <button
@@ -189,8 +245,49 @@ export default function ExportMenu({
         <span style={{ fontSize: "8px", opacity: 0.6, transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}>{"\u25BC"}</span>
       </button>
 
-      {open && (
+      {/* Mobile: bottom sheet */}
+      {open && isMobile && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={() => setOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.4)",
+              zIndex: 199,
+            }}
+          />
+          {/* Sheet */}
+          <div
+            style={{
+              position: "fixed",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              background: "var(--bgElevated, var(--bg2))",
+              borderTop: "1px solid var(--border3)",
+              borderRadius: "16px 16px 0 0",
+              zIndex: 200,
+              maxHeight: "80vh",
+              overflowY: "auto",
+              paddingBottom: "env(safe-area-inset-bottom, 16px)",
+              boxShadow: "0 -8px 32px rgba(0,0,0,0.2)",
+            }}
+          >
+            {/* Handle bar */}
+            <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px" }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--border3)" }} />
+            </div>
+            {dropdownContent}
+          </div>
+        </>
+      )}
+
+      {/* Desktop: dropdown */}
+      {open && !isMobile && (
         <div
+          ref={dropdownRef}
           style={{
             position: "absolute",
             top: "calc(100% + 8px)",
@@ -206,43 +303,7 @@ export default function ExportMenu({
             transformOrigin: "top right",
           }}
         >
-          {/* Customer section header */}
-          {getInternalHtml && (
-            <div style={{
-              padding: "8px 16px 4px",
-              fontSize: "9px",
-              fontWeight: 700,
-              color: "var(--text5)",
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-            }}>
-              Customer Version
-            </div>
-          )}
-
-          {customerOptions.map((opt, i) =>
-            renderOption(opt, i, !getInternalHtml && i === customerOptions.length - 1),
-          )}
-
-          {/* Internal section */}
-          {getInternalHtml && internalOptions.length > 0 && (
-            <>
-              <div style={{
-                padding: "8px 16px 4px",
-                fontSize: "9px",
-                fontWeight: 700,
-                color: "#F59E0B",
-                textTransform: "uppercase",
-                letterSpacing: "1px",
-                borderTop: "1px solid var(--border)",
-              }}>
-                Internal Version
-              </div>
-              {internalOptions.map((opt, i) =>
-                renderOption(opt, i, i === internalOptions.length - 1),
-              )}
-            </>
-          )}
+          {dropdownContent}
         </div>
       )}
     </div>
