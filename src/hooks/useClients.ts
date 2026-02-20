@@ -84,5 +84,23 @@ export function useClients() {
     [user],
   );
 
-  return { clients, loading, list, save, remove };
+  /** Fetch a single client by ID */
+  const get = useCallback(
+    async (id: string): Promise<Client | null> => {
+      if (!user) return null;
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("id", id)
+        .single();
+      if (error) {
+        console.error("[useClients] get error:", error.message);
+      }
+      return (data as Client) ?? null;
+    },
+    [user],
+  );
+
+  return { clients, loading, list, save, remove, get };
 }

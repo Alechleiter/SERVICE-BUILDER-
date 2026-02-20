@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useClients } from "@/hooks/useClients";
 import { useProposals, type ProposalListItem } from "@/hooks/useProposals";
@@ -20,11 +21,13 @@ const SANS = "'Inter','DM Sans',sans-serif";
 const MONO = "'DM Mono',monospace";
 
 export default function ClientsPage() {
+  const router = useRouter();
   const { user, isConfigured } = useAuth();
   const { clients, loading, list, save, remove } = useClients();
   const { proposals, list: listProposals } = useProposals();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     name: "",
     address: "",
@@ -41,6 +44,17 @@ export default function ClientsPage() {
       listProposals();
     }
   }, [user, list, listProposals]);
+
+  const filteredClients = useMemo(() => {
+    if (!search.trim()) return clients;
+    const q = search.toLowerCase();
+    return clients.filter((c) =>
+      c.name.toLowerCase().includes(q) ||
+      (c.address ?? "").toLowerCase().includes(q) ||
+      (c.contact_name ?? "").toLowerCase().includes(q) ||
+      (c.contact_email ?? "").toLowerCase().includes(q)
+    );
+  }, [clients, search]);
 
   const resetForm = () => {
     setForm({ name: "", address: "", contactName: "", contactEmail: "", contactPhone: "", verticalId: "", notes: "" });
@@ -166,6 +180,32 @@ export default function ClientsPage() {
           </button>
         </div>
 
+        {/* Search */}
+        {clients.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search clients by name, address, contact..."
+              style={{
+                width: "100%",
+                padding: "10px 14px 10px 36px",
+                background: "var(--bg2)",
+                border: "1px solid var(--border2)",
+                borderRadius: 10,
+                color: "var(--text)",
+                fontSize: 13,
+                fontFamily: SANS,
+                outline: "none",
+                boxSizing: "border-box" as const,
+                backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E\")",
+                backgroundRepeat: "no-repeat",
+                backgroundPosition: "12px center",
+              }}
+            />
+          </div>
+        )}
+
         {/* Form */}
         {showForm && (
           <div style={{
@@ -262,23 +302,30 @@ export default function ClientsPage() {
         )}
 
         {/* Client list */}
-        {clients.length > 0 && (
+        {filteredClients.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {clients.map((client) => {
+            {filteredClients.map((client) => {
               const vert = VERTICALS.find((v) => v.id === client.vertical_id);
               const proposalCount = proposals.filter((p) => p.client_id === client.id).length;
               return (
-                <div key={client.id} style={{
-                  background: "var(--bg2)",
-                  border: "1px solid var(--border2)",
-                  borderRadius: 12,
-                  padding: "16px 20px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 16,
-                  transition: "all 0.15s",
-                }}>
+                <div
+                  key={client.id}
+                  onClick={() => router.push(`/clients/${client.id}`)}
+                  style={{
+                    background: "var(--bg2)",
+                    border: "1px solid var(--border2)",
+                    borderRadius: 12,
+                    padding: "16px 20px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    transition: "all 0.15s",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent, #10b981)"; e.currentTarget.style.background = "var(--bg3)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border2)"; e.currentTarget.style.background = "var(--bg2)"; }}
+                >
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                       {vert && <span style={{ fontSize: 14 }}>{vert.icon}</span>}
@@ -304,25 +351,35 @@ export default function ClientsPage() {
                       </p>
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    <button onClick={() => startEdit(client)} style={{
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+                    <button onClick={(e) => { e.stopPropagation(); startEdit(client); }} style={{
                       background: "var(--bg3)", border: "1px solid var(--border3)",
                       borderRadius: 6, color: "var(--text4)", cursor: "pointer",
                       padding: "4px 10px", fontSize: 11,
                     }}>
                       Edit
                     </button>
-                    <button onClick={() => handleDelete(client.id)} style={{
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }} style={{
                       background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
                       borderRadius: 6, color: "#ef4444", cursor: "pointer",
                       padding: "4px 10px", fontSize: 11,
                     }}>
                       Delete
                     </button>
+                    <span style={{ color: "var(--text5)", fontSize: 16, marginLeft: 4 }}>{"\u203A"}</span>
                   </div>
                 </div>
               );
             })}
+          </div>
+        )}
+        {/* No search results */}
+        {search.trim() && filteredClients.length === 0 && clients.length > 0 && (
+          <div style={{
+            textAlign: "center", padding: "40px 20px",
+            color: "var(--text4)", fontSize: 13,
+          }}>
+            No clients match &quot;{search}&quot;
           </div>
         )}
       </div>

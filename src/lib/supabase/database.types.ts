@@ -245,6 +245,7 @@ export interface Database {
           form_data: Json;
           inspection_date: string | null;
           status: "draft" | "sent" | "accepted" | "declined";
+          bucket: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -257,6 +258,7 @@ export interface Database {
           session_id?: string | null;
           inspection_date?: string | null;
           status?: "draft" | "sent" | "accepted" | "declined";
+          bucket?: string | null;
         };
         Update: {
           template_id?: string;
@@ -266,6 +268,7 @@ export interface Database {
           session_id?: string | null;
           inspection_date?: string | null;
           status?: "draft" | "sent" | "accepted" | "declined";
+          bucket?: string | null;
         };
         Relationships: [
           {

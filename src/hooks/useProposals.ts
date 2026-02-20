@@ -13,6 +13,7 @@ export interface ProposalListItem {
   status: string;
   updated_at: string;
   client_id: string | null;
+  bucket: string | null;
 }
 
 /**
@@ -36,7 +37,7 @@ export function useProposals() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("proposals")
-        .select("id, name, template_id, status, updated_at, client_id")
+        .select("id, name, template_id, status, updated_at, client_id, bucket")
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false });
       if (error) {
@@ -309,5 +310,37 @@ export function useProposals() {
     [user],
   );
 
-  return { proposals, loading, saveError, list, save, load, remove, updateStatus, finalize };
+  /** Quick-assign a bucket label to a proposal */
+  const updateBucket = useCallback(
+    async (id: string, bucket: string | null) => {
+      if (!user) return;
+      const supabase = createClient();
+      const { error } = await supabase.from("proposals").update({ bucket }).eq("id", id);
+      if (error) {
+        console.error("[useProposals] updateBucket error:", error.message);
+      }
+    },
+    [user],
+  );
+
+  /** Fetch all proposals for a given client (returns directly, no state) */
+  const listByClient = useCallback(
+    async (clientId: string): Promise<ProposalListItem[]> => {
+      if (!user) return [];
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("proposals")
+        .select("id, name, template_id, status, updated_at, client_id, bucket")
+        .eq("user_id", user.id)
+        .eq("client_id", clientId)
+        .order("updated_at", { ascending: false });
+      if (error) {
+        console.error("[useProposals] listByClient error:", error.message);
+      }
+      return (data ?? []) as ProposalListItem[];
+    },
+    [user],
+  );
+
+  return { proposals, loading, saveError, list, save, load, remove, updateStatus, finalize, updateBucket, listByClient };
 }
