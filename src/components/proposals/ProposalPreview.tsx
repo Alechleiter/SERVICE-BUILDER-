@@ -213,9 +213,11 @@ interface ProposalPreviewProps {
   photos: PhotoEntry[];
   inspectionDate: string;
   mapData?: MapData | null;
+  colorOverride?: string;
+  companyNameOverride?: string;
 }
 
-export default function ProposalPreview({ templateKey, data, templateConfig, photos, inspectionDate, mapData }: ProposalPreviewProps) {
+export default function ProposalPreview({ templateKey, data, templateConfig, photos, inspectionDate, mapData, colorOverride, companyNameOverride }: ProposalPreviewProps) {
   const content = generateContent(templateKey, data);
   const isQuote = templateKey === "inspection_report" && hasInspectionPricing(data);
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
@@ -223,14 +225,15 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
     ? new Date(inspectionDate + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : null;
   const groups = groupByZone(photos || []);
-  const cc = templateConfig.color;
+  const cc = colorOverride || templateConfig.color;
+  const brandName = companyNameOverride || "PEST CONTROL";
 
   return (
     <div id="proposal-preview" style={{ background: "#fff", color: "#1a1a2e", fontFamily: "'Georgia','Times New Roman',serif", padding: "clamp(16px, 4vw, 48px) clamp(12px, 3vw, 40px)", lineHeight: 1.65 }}>
       {/* Header */}
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `3px solid ${cc}`, paddingBottom: 16, marginBottom: 28, gap: 8 }}>
         <div>
-          <div style={{ fontFamily: "'Arial Black','Helvetica',sans-serif", fontSize: "clamp(18px, 5vw, 28px)", fontWeight: 900, color: cc, letterSpacing: "-0.5px", lineHeight: 1.2 }}>PEST CONTROL</div>
+          <div style={{ fontFamily: "'Arial Black','Helvetica',sans-serif", fontSize: "clamp(18px, 5vw, 28px)", fontWeight: 900, color: cc, letterSpacing: "-0.5px", lineHeight: 1.2 }}>{brandName}</div>
           <div style={{ fontFamily: "'Arial',sans-serif", fontSize: 10, letterSpacing: "2px", color: "#666", marginTop: 2, textTransform: "uppercase" }}>{content.title.includes("Inspection") ? (isQuote ? "Inspection Report & Quote" : "Inspection Report") : "Service Proposal"}</div>
         </div>
         <div style={{ textAlign: "right", fontFamily: "'Arial',sans-serif", fontSize: 12, color: "#666" }}>

@@ -38,6 +38,7 @@ const TARGET_PEST_FIELD: TemplateField = {
     "Bed Bugs",
     "Bird Mites",
     "Rat Mites",
+    "Mosquitoes",
     "Wasps",
     "Bees",
   ],

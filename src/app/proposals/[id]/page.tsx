@@ -26,6 +26,12 @@ import { useAutoSave, type AutoSaveData } from "@/hooks/useAutoSave";
 const SANS = "'DM Sans',sans-serif";
 const MONO = "'DM Mono',monospace";
 
+/** Preset accent colours for quick selection */
+const ACCENT_PRESETS = [
+  "#E63946", "#457B9D", "#2A9D8F", "#E9C46A", "#7B68EE", "#6366F1",
+  "#10B981", "#F97316", "#DC2626", "#0EA5E9", "#8B5CF6", "#EC4899",
+];
+
 // All templates now show the Site Map & Equipment diagram
 
 export default function SavedProposalPage() {
@@ -56,6 +62,7 @@ export default function SavedProposalPage() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showRestore, setShowRestore] = useState(false);
   const [restoredDraft, setRestoredDraft] = useState<AutoSaveData | null>(null);
+  const [showBrandBar, setShowBrandBar] = useState(false);
 
   // Sync theme
   useEffect(() => {
@@ -216,10 +223,10 @@ export default function SavedProposalPage() {
       }
       // Generate both versions
       const content = generateContent(selectedTemplate, formData);
-      const customerHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "customer");
-      const internalHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, false, mapData, "internal");
-      const customerWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "customer", mapImageRef.current);
-      const internalWordHtml = buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, true, mapData, "internal", mapImageRef.current);
+      const customerHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, false, mapData, "customer", null, companyName);
+      const internalHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, false, mapData, "internal", null, companyName);
+      const customerWordHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, true, mapData, "customer", mapImageRef.current, companyName);
+      const internalWordHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, true, mapData, "internal", mapImageRef.current, companyName);
       // Save snapshots
       const version = await finalize({ proposalId, customerHtml, internalHtml, formData });
       console.log("[SavedPage:Finalize] Finalize returned version:", version);
@@ -251,6 +258,11 @@ export default function SavedProposalPage() {
     : 0;
   const totalFields = selectedTemplate ? TEMPLATES[selectedTemplate].fields.length : 0;
 
+  // Effective accent color — user override stored in formData, fallback to template
+  const accentColor = formData.accent_color || (selectedTemplate ? TEMPLATES[selectedTemplate].color : "#2A9D8F");
+  // Company name — user override stored in formData, fallback to "PEST CONTROL"
+  const companyName = formData.company_name || "PEST CONTROL";
+
   const getFileName = useCallback(() => {
     const name = formData.property_name || formData.restaurant_name || proposalName || "Proposal";
     // Keep original name — only strip characters unsafe for filenames
@@ -261,15 +273,15 @@ export default function SavedProposalPage() {
     if (!selectedTemplate) return "";
     const fw = opts?.forWord ?? false;
     const content = generateContent(selectedTemplate, formData);
-    return buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, fw, mapData, "customer", fw ? mapImageRef.current : null);
-  }, [selectedTemplate, formData, photos, inspectionDate, mapData]);
+    return buildProposalExportHTML(content, accentColor, photos, inspectionDate, fw, mapData, "customer", fw ? mapImageRef.current : null, companyName);
+  }, [selectedTemplate, formData, photos, inspectionDate, mapData, accentColor, companyName]);
 
   const getInternalHtml = useCallback((opts?: { forWord?: boolean }) => {
     if (!selectedTemplate) return "";
     const fw = opts?.forWord ?? false;
     const content = generateContent(selectedTemplate, formData);
-    return buildProposalExportHTML(content, TEMPLATES[selectedTemplate].color, photos, inspectionDate, fw, mapData, "internal", fw ? mapImageRef.current : null);
-  }, [selectedTemplate, formData, photos, inspectionDate, mapData]);
+    return buildProposalExportHTML(content, accentColor, photos, inspectionDate, fw, mapData, "internal", fw ? mapImageRef.current : null, companyName);
+  }, [selectedTemplate, formData, photos, inspectionDate, mapData, accentColor, companyName]);
 
   const getPlainText = useCallback(() => {
     if (!selectedTemplate) return "";
@@ -464,7 +476,7 @@ export default function SavedProposalPage() {
         {!isMobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 100, height: 5, background: "var(--bg3)", borderRadius: 3, overflow: "hidden" }}>
-              <div style={{ width: `${(filledCount / totalFields) * 100}%`, height: "100%", background: tmpl!.color, borderRadius: 3, transition: "width 0.3s" }} />
+              <div style={{ width: `${(filledCount / totalFields) * 100}%`, height: "100%", background: accentColor, borderRadius: 3, transition: "width 0.3s" }} />
             </div>
             <span style={{ fontSize: 11, color: "var(--text4)", fontFamily: MONO }}>{filledCount}/{totalFields}</span>
           </div>
@@ -515,9 +527,119 @@ export default function SavedProposalPage() {
               {tab === "form" ? "\u270F\uFE0F Edit" : "\u{1F441}\uFE0F Preview"}
             </button>
           ))}
-          <ExportMenu getHtml={getExportHtml} getInternalHtml={getInternalHtml} getPlainText={getPlainText} filename={getFileName()} title={tmpl!.name} accentColor={tmpl!.color} />
+          <button
+            onClick={() => setShowBrandBar((p) => !p)}
+            title="Brand & Color Settings"
+            style={{
+              background: showBrandBar ? accentColor : "var(--bg3)",
+              border: `1px solid ${showBrandBar ? accentColor : "var(--border3)"}`,
+              borderRadius: 8,
+              color: showBrandBar ? "#fff" : "var(--text4)",
+              cursor: "pointer",
+              padding: isMobile ? "5px 10px" : "5px 12px",
+              fontSize: isMobile ? 11 : 12,
+              fontWeight: 600,
+              display: "flex", alignItems: "center", gap: 4,
+              transition: "all 0.2s",
+            }}>
+            {"\u{1F3A8}"}{isMobile ? "" : " Brand"}
+          </button>
+          <ExportMenu getHtml={getExportHtml} getInternalHtml={getInternalHtml} getPlainText={getPlainText} filename={getFileName()} title={tmpl!.name} accentColor={accentColor} />
         </div>
       </div>
+
+      {/* Brand & Color Settings Bar */}
+      {showBrandBar && (
+        <div style={{
+          position: isMobile ? "relative" : "sticky", top: isMobile ? undefined : 107, zIndex: 99,
+          background: isDark ? "rgba(20,20,20,0.95)" : "rgba(250,250,245,0.95)",
+          backdropFilter: isMobile ? undefined : "blur(12px)",
+          borderBottom: "1px solid var(--border)",
+          padding: isMobile ? "10px 12px" : "10px 20px",
+        }}>
+          <div style={{
+            maxWidth: 1400, margin: "0 auto",
+            display: "flex", alignItems: "center", gap: isMobile ? 10 : 20, flexWrap: "wrap",
+          }}>
+            {/* Company Name */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: isMobile ? "1 1 100%" : "0 0 auto" }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text4)", whiteSpace: "nowrap", fontFamily: SANS }}>
+                Company
+              </label>
+              <input
+                value={formData.company_name || ""}
+                onChange={(e) => handleFieldChange("company_name", e.target.value)}
+                placeholder="PEST CONTROL"
+                style={{
+                  background: "var(--bg3)", border: "1px solid var(--border3)",
+                  borderRadius: 8, color: "var(--text)", padding: "5px 10px",
+                  fontSize: 13, fontWeight: 700, fontFamily: SANS,
+                  width: isMobile ? "100%" : 200, outline: "none",
+                  letterSpacing: "-0.01em",
+                }}
+              />
+            </div>
+
+            {/* Accent Color */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: isMobile ? "1 1 100%" : "0 0 auto" }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text4)", whiteSpace: "nowrap", fontFamily: SANS }}>
+                Color
+              </label>
+              <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+                {ACCENT_PRESETS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => handleFieldChange("accent_color", c)}
+                    title={c}
+                    style={{
+                      width: 22, height: 22, borderRadius: "50%",
+                      background: c, border: accentColor === c ? "2.5px solid #fff" : "2px solid transparent",
+                      cursor: "pointer", flexShrink: 0,
+                      boxShadow: accentColor === c ? `0 0 0 2px ${c}, 0 2px 6px rgba(0,0,0,0.3)` : "0 1px 3px rgba(0,0,0,0.15)",
+                      transition: "all 0.15s",
+                    }}
+                  />
+                ))}
+                {/* Custom color picker */}
+                <div style={{ position: "relative", width: 22, height: 22, flexShrink: 0 }}>
+                  <input
+                    type="color"
+                    value={accentColor}
+                    onChange={(e) => handleFieldChange("accent_color", e.target.value)}
+                    style={{
+                      position: "absolute", inset: 0, width: "100%", height: "100%",
+                      opacity: 0, cursor: "pointer",
+                    }}
+                  />
+                  <div style={{
+                    width: 22, height: 22, borderRadius: "50%",
+                    background: `conic-gradient(red, yellow, lime, aqua, blue, magenta, red)`,
+                    border: "2px solid var(--border3)",
+                    pointerEvents: "none",
+                  }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Reset button */}
+            {(formData.accent_color || formData.company_name) && (
+              <button
+                onClick={() => {
+                  handleFieldChange("accent_color", "");
+                  handleFieldChange("company_name", "");
+                }}
+                style={{
+                  background: "transparent", border: "1px solid var(--border3)",
+                  borderRadius: 8, color: "var(--text5)", cursor: "pointer",
+                  padding: "4px 10px", fontSize: 10, fontWeight: 600, fontFamily: SANS,
+                  whiteSpace: "nowrap",
+                }}>
+                Reset to Default
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Restore Draft Banner */}
       {showRestore && restoredDraft && (
@@ -598,7 +720,7 @@ export default function SavedProposalPage() {
               sections={sections}
               activeIndex={openSectionIndex}
               onSectionClick={handleSectionClick}
-              accentColor={tmpl!.color}
+              accentColor={accentColor}
             />
           )}
 
@@ -613,7 +735,7 @@ export default function SavedProposalPage() {
               onClose={handleSectionClose}
               onPrev={handleSectionPrev}
               onNext={handleSectionNext}
-              accentColor={tmpl!.color}
+              accentColor={accentColor}
               isMobile={false}
             >
               {openSectionIndex !== null && renderSectionContent(openSectionIndex)}
@@ -632,7 +754,7 @@ export default function SavedProposalPage() {
             onClose={handleSectionClose}
             onPrev={handleSectionPrev}
             onNext={handleSectionNext}
-            accentColor={tmpl!.color}
+            accentColor={accentColor}
             isMobile={true}
           >
             {openSectionIndex !== null && renderSectionContent(openSectionIndex)}
@@ -646,7 +768,7 @@ export default function SavedProposalPage() {
           background: "var(--bg2)",
         }}>
           <div style={{ maxWidth: 750, margin: "0 auto", borderRadius: 12, overflow: "hidden", boxShadow: "0 4px 32px rgba(0,0,0,0.15)" }}>
-            <ProposalPreview templateKey={selectedTemplate} data={formData} templateConfig={tmpl!} photos={photos} inspectionDate={inspectionDate} mapData={mapData} />
+            <ProposalPreview templateKey={selectedTemplate} data={formData} templateConfig={tmpl!} photos={photos} inspectionDate={inspectionDate} mapData={mapData} colorOverride={accentColor} companyNameOverride={companyName} />
           </div>
         </div>
       </div>

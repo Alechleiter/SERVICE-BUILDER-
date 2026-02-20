@@ -202,7 +202,9 @@ export function buildProposalExportHTML(
   mapData?: MapData | null,
   variant: ExportVariant = "customer",
   mapImageSrc?: string | null,
+  companyName?: string,
 ): string {
+  const brandName = companyName || "PEST CONTROL";
   const groups = groupByZone(photos || []);
   const fmtDate = inspectionDate
     ? new Date(inspectionDate + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
@@ -243,13 +245,13 @@ export function buildProposalExportHTML(
   if (forWord) {
     // Table-based header for Word
     html += `<table style="width:100%;border-bottom:3px solid ${color};margin-bottom:24px;" cellpadding="0" cellspacing="0"><tr>`;
-    html += `<td style="padding-bottom:14px;"><div style="font-size:26px;font-weight:900;color:${color};">PEST CONTROL</div>`;
+    html += `<td style="padding-bottom:14px;"><div style="font-size:26px;font-weight:900;color:${color};">${brandName}</div>`;
     html += `<div style="font-size:10px;letter-spacing:2px;color:#666;text-transform:uppercase;">${headerSubtitle}</div></td>`;
     html += `<td style="padding-bottom:14px;text-align:right;font-size:12px;color:#666;vertical-align:top;">Prepared: ${today}</td>`;
     html += `</tr></table>`;
   } else {
     html += `<div style="display:flex;justify-content:space-between;border-bottom:3px solid ${color};padding-bottom:14px;margin-bottom:24px;">`;
-    html += `<div><div style="font-size:26px;font-weight:900;color:${color};letter-spacing:-0.5px;">PEST CONTROL</div>`;
+    html += `<div><div style="font-size:26px;font-weight:900;color:${color};letter-spacing:-0.5px;">${brandName}</div>`;
     html += `<div style="font-size:10px;letter-spacing:2px;color:#666;text-transform:uppercase;">${headerSubtitle}</div></div>`;
     html += `<div style="text-align:right;font-size:12px;color:#666;"><div>Prepared: ${today}</div></div></div>`;
   }
@@ -342,19 +344,23 @@ export function buildProposalExportHTML(
         }
         html += `</table>`;
       } else {
-        // PDF/clipboard: flex layout
-        html += `<div style="display:flex;flex-wrap:wrap;gap:12px;">`;
-        (group.photos as PhotoEntry[]).forEach((p) => {
-          html += `<div class="pb-avoid" style="flex:1;min-width:45%;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;margin-bottom:8px;page-break-inside:avoid;">`;
-          html += `<img src="${p.src}" style="width:100%;max-height:280px;object-fit:cover;display:block;" />`;
-          html += `<div style="padding:8px 10px;font-size:11px;border-top:1px solid #eee;">`;
-          if (p.concernType) html += `<div style="color:${color};font-weight:700;font-size:10px;margin-bottom:2px;">Concern: ${p.concernType}</div>`;
-          if (p.locationFound) html += `<div style="color:#555;font-size:10px;margin-bottom:2px;">Location: ${p.locationFound}</div>`;
-          if (p.caption) html += `<div style="color:#333;">${p.caption}</div>`;
-          if (!p.caption && !p.concernType && !p.locationFound) html += `<div style="color:#999;">No caption provided</div>`;
-          html += `</div></div>`;
-        });
-        html += `</div>`;
+        // PDF/clipboard: grid layout — 2 photos per row, each row in its own pb-avoid block
+        const zonePhotosArr = group.photos as PhotoEntry[];
+        for (let pi = 0; pi < zonePhotosArr.length; pi += 2) {
+          html += `<div class="pb-avoid" style="display:flex;gap:12px;margin-bottom:12px;page-break-inside:avoid;">`;
+          const row = zonePhotosArr.slice(pi, pi + 2);
+          row.forEach((p) => {
+            html += `<div style="flex:1;min-width:45%;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;">`;
+            html += `<img src="${p.src}" style="width:100%;max-height:280px;object-fit:cover;display:block;" />`;
+            html += `<div style="padding:8px 10px;font-size:11px;border-top:1px solid #eee;">`;
+            if (p.concernType) html += `<div style="color:${color};font-weight:700;font-size:10px;margin-bottom:2px;">Concern: ${p.concernType}</div>`;
+            if (p.locationFound) html += `<div style="color:#555;font-size:10px;margin-bottom:2px;">Location: ${p.locationFound}</div>`;
+            if (p.caption) html += `<div style="color:#333;">${p.caption}</div>`;
+            if (!p.caption && !p.concernType && !p.locationFound) html += `<div style="color:#999;">No caption provided</div>`;
+            html += `</div></div>`;
+          });
+          html += `</div>`;
+        }
       }
     });
     if (!forWord) html += `</div>`;
