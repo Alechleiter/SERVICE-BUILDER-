@@ -40,7 +40,8 @@ export default function AuthPage() {
           password,
         });
         if (signInError) throw signInError;
-        router.push("/");
+        // Full page navigation ensures auth cookies are sent to middleware
+        window.location.href = "/";
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An error occurred");
