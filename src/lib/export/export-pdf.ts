@@ -20,7 +20,7 @@ const CONTENT_H_PT = PAGE_H_PT - MARGIN_PT * 2; // 720
 
 // ── Render settings ───────────────────────────────────────────────────
 const RENDER_WIDTH = 750;
-const SCALE = 3;
+const SCALE = 2; // 2× is crisp for print while keeping file size manageable
 
 /** Detect if an element carries a forced page-break-before */
 function hasPageBreakBefore(el: HTMLElement): boolean {
@@ -207,15 +207,15 @@ export async function exportPDF(html: string, title = "Document"): Promise<void>
 
       document.body.removeChild(pageContainer);
 
-      // Add rendered canvas to PDF as a single page image (PNG for crisp quality)
-      const imgData = canvas.toDataURL("image/png");
+      // Add rendered canvas to PDF as JPEG (much smaller than PNG, still crisp)
+      const imgData = canvas.toDataURL("image/jpeg", 0.85);
       const destH = (canvas.height / canvas.width) * CONTENT_W_PT;
 
       // If the rendered content somehow exceeds one page height (a single
       // atomic block like a very tall photo), we still need to handle it,
       // but this should be rare with proper block sizing.
       if (destH <= CONTENT_H_PT + 2) {
-        pdf.addImage(imgData, "PNG", MARGIN_PT, MARGIN_PT, CONTENT_W_PT, destH);
+        pdf.addImage(imgData, "JPEG", MARGIN_PT, MARGIN_PT, CONTENT_W_PT, destH);
       } else {
         // Fallback: slice the oversized canvas
         const pxPerPt = canvas.width / CONTENT_W_PT;
@@ -233,9 +233,9 @@ export async function exportPDF(html: string, title = "Document"): Promise<void>
           const ctx = sliceCanvas.getContext("2d")!;
           ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, Math.round(srcH));
 
-          const sliceData = sliceCanvas.toDataURL("image/png");
+          const sliceData = sliceCanvas.toDataURL("image/jpeg", 0.85);
           const sliceDestH = srcH / pxPerPt;
-          pdf.addImage(sliceData, "PNG", MARGIN_PT, MARGIN_PT, CONTENT_W_PT, sliceDestH);
+          pdf.addImage(sliceData, "JPEG", MARGIN_PT, MARGIN_PT, CONTENT_W_PT, sliceDestH);
         }
       }
     }

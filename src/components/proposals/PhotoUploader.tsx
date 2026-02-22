@@ -2,6 +2,7 @@
 import { useRef, useState, useCallback } from "react";
 import type { PhotoEntry } from "@/lib/proposals/types";
 import { ZONE_PRESETS, getZoneLabel } from "@/lib/proposals/zone-presets";
+import { compressImage } from "@/lib/compress-image";
 
 const iS: React.CSSProperties = {
   background: "var(--bg)", border: "1px solid var(--border3)", borderRadius: 6,
@@ -39,10 +40,13 @@ export default function PhotoUploader({ photos, onPhotosChange, inspectionDate, 
   const handleFiles = (files: FileList | File[]) => {
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
+        const raw = ev.target?.result as string;
+        // Compress to keep exports under ~15 MB
+        const src = await compressImage(raw);
         onPhotosChange((prev) => [...prev, {
           id: Date.now() + Math.random(),
-          src: ev.target?.result as string,
+          src,
           caption: "",
           fileName: file.name,
           zone: "exterior",
