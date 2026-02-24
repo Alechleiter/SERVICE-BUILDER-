@@ -367,55 +367,69 @@ export function buildProposalExportHTML(
       return;
     }
 
-    // ── Pricing: table + includes rendering ──
+    // ── Pricing: table + includes rendering (supports __OPT__ option headers) ──
     if (upper === "PRICING") {
-      // Group items into pricing blocks: each __ROW__ followed by zero or more __INC__
       type PricingBlock = { service: string; cost: string; includes: string[] };
-      const blocks: PricingBlock[] = [];
+      type OptionGroup = { name: string | null; blocks: PricingBlock[] };
+      const optionGroups: OptionGroup[] = [];
       const notes: string[] = [];
-      let cur: PricingBlock | null = null;
+      let curGroup: OptionGroup = { name: null, blocks: [] };
+      let curBlock: PricingBlock | null = null;
+
       s.items.forEach((item) => {
-        if (item.startsWith("__ROW__")) {
-          if (cur) blocks.push(cur);
+        if (item.startsWith("__OPT__")) {
+          if (curBlock) { curGroup.blocks.push(curBlock); curBlock = null; }
+          if (curGroup.blocks.length > 0) optionGroups.push(curGroup);
+          curGroup = { name: item.replace("__OPT__", ""), blocks: [] };
+        } else if (item.startsWith("__ROW__")) {
+          if (curBlock) curGroup.blocks.push(curBlock);
           const parts = item.replace("__ROW__", "").split("|");
-          cur = { service: parts[0] || "", cost: parts[1] || "", includes: [] };
-          // backward compat: old 3-column pipe format
-          if (parts[2]?.trim()) cur.includes.push(parts[2].trim());
-        } else if (item.startsWith("__INC__") && cur) {
-          cur.includes.push(item.replace("__INC__", ""));
+          curBlock = { service: parts[0] || "", cost: parts[1] || "", includes: [] };
+          if (parts[2]?.trim()) curBlock.includes.push(parts[2].trim());
+        } else if (item.startsWith("__INC__") && curBlock) {
+          curBlock.includes.push(item.replace("__INC__", ""));
         } else {
-          if (cur) { blocks.push(cur); cur = null; }
+          if (curBlock) { curGroup.blocks.push(curBlock); curBlock = null; }
           notes.push(item);
         }
       });
-      if (cur) blocks.push(cur);
+      if (curBlock) curGroup.blocks.push(curBlock);
+      if (curGroup.blocks.length > 0) optionGroups.push(curGroup);
+
+      const renderPricingTable = (blocks: PricingBlock[]) => {
+        let t = `<table style="width:100%;border-collapse:collapse;margin:8px 0 12px;font-size:13px;" cellpadding="0" cellspacing="0">`;
+        t += `<tr style="border-bottom:2px solid #ddd;">`;
+        t += `<th style="text-align:left;padding:6px 10px;font-weight:700;color:#666;text-transform:uppercase;font-size:10px;">Service</th>`;
+        t += `<th style="text-align:right;padding:6px 10px;font-weight:700;color:#666;text-transform:uppercase;font-size:10px;">Cost</th>`;
+        t += `</tr>`;
+        blocks.forEach((b) => {
+          t += `<tr style="border-bottom:${b.includes.length ? "none" : "1px solid #eee"};">`;
+          t += `<td style="padding:6px 10px;font-weight:600;">${b.service}</td>`;
+          t += `<td style="padding:6px 10px;font-weight:700;text-align:right;">${b.cost}</td>`;
+          t += `</tr>`;
+          if (b.includes.length > 0) {
+            t += `<tr style="border-bottom:1px solid #eee;">`;
+            t += `<td colspan="2" style="padding:2px 10px 8px 24px;">`;
+            b.includes.forEach((inc) => {
+              t += `<p style="font-size:12px;color:#555;margin:0 0 2px;">\u2022 ${inc}</p>`;
+            });
+            t += `</td></tr>`;
+          }
+        });
+        t += `</table>`;
+        return t;
+      };
 
       if (!forWord) html += `<div class="pb-avoid" style="page-break-inside:avoid;">`;
       html += `<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${color};border-bottom:1px solid ${color}44;padding-bottom:5px;margin:20px 0 10px;">${s.heading}</h2>`;
 
-      if (blocks.length > 0) {
-        html += `<table style="width:100%;border-collapse:collapse;margin:8px 0 12px;font-size:13px;" cellpadding="0" cellspacing="0">`;
-        html += `<tr style="border-bottom:2px solid #ddd;">`;
-        html += `<th style="text-align:left;padding:6px 10px;font-weight:700;color:#666;text-transform:uppercase;font-size:10px;">Service</th>`;
-        html += `<th style="text-align:right;padding:6px 10px;font-weight:700;color:#666;text-transform:uppercase;font-size:10px;">Cost</th>`;
-        html += `</tr>`;
-        blocks.forEach((b) => {
-          html += `<tr style="border-bottom:${b.includes.length ? "none" : "1px solid #eee"};">`;
-          html += `<td style="padding:6px 10px;font-weight:600;">${b.service}</td>`;
-          html += `<td style="padding:6px 10px;font-weight:700;text-align:right;">${b.cost}</td>`;
-          html += `</tr>`;
-          if (b.includes.length > 0) {
-            html += `<tr style="border-bottom:1px solid #eee;">`;
-            html += `<td colspan="2" style="padding:2px 10px 8px 24px;">`;
-            b.includes.forEach((inc) => {
-              html += `<p style="font-size:12px;color:#555;margin:0 0 2px;">\u2022 ${inc}</p>`;
-            });
-            html += `</td></tr>`;
-          }
-        });
-        html += `</table>`;
-      }
-      // Fallback: old-style bullet items or pricing notes
+      optionGroups.forEach((og) => {
+        if (og.name) {
+          html += `<h3 style="font-size:14px;font-weight:700;color:${color};margin:14px 0 4px;border-bottom:2px solid ${color}22;padding-bottom:4px;">${og.name}</h3>`;
+        }
+        if (og.blocks.length > 0) html += renderPricingTable(og.blocks);
+      });
+
       notes.forEach((item) => {
         html += `<p style="font-size:13px;color:#333;margin:0 0 6px;padding-left:14px;">\u2022 ${item}</p>`;
       });

@@ -69,11 +69,18 @@ export const ITEM_PRESETS: CadPreset[] = [
   { abbreviation: "VN", label: "Vent Needed", color: "#F87171", category: "item" },
 ];
 
-/* ── ISSUE presets (orange circles) ── */
+/* ── ISSUE presets (orange circles + special colors) ── */
+const WATER_COLOR = "#2563EB"; // blue for standing water
 export const ISSUE_PRESETS: CadPreset[] = [
   { abbreviation: "A", label: "Active Infestation", color: ISSUE_COLOR, category: "issue" },
   { abbreviation: "EF", label: "Excessive Food Debris", color: ISSUE_COLOR, category: "issue" },
   { abbreviation: "EM", label: "Excessive Moisture", color: ISSUE_COLOR, category: "issue" },
+  { abbreviation: "SW", label: "Standing Water", color: WATER_COLOR, category: "issue" },
+  { abbreviation: "GW", label: "Gaps in Wall", color: ISSUE_COLOR, category: "issue" },
+  { abbreviation: "HW", label: "Holes in Wall", color: ISSUE_COLOR, category: "issue" },
+  { abbreviation: "ND", label: "Need Door Sweep", color: ISSUE_COLOR, category: "issue" },
+  { abbreviation: "MV", label: "Missing/Damaged Vent Screen", color: ISSUE_COLOR, category: "issue" },
+  { abbreviation: "MW", label: "Missing Window Screen", color: ISSUE_COLOR, category: "issue" },
   { abbreviation: "IA", label: "Inaccessible Area", color: ISSUE_COLOR, category: "issue" },
   { abbreviation: "MS", label: "Miscellaneous", color: ISSUE_COLOR, category: "issue" },
   { abbreviation: "P", label: "Utility Penetration", color: ISSUE_COLOR, category: "issue" },

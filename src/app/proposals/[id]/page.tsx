@@ -15,6 +15,7 @@ import ProposalPreview from "@/components/proposals/ProposalPreview";
 import PhotoUploader from "@/components/proposals/PhotoUploader";
 import MultiMapEditor from "@/components/proposals/MultiMapEditor";
 import ChartBuilder from "@/components/proposals/ChartBuilder";
+import PricingCalculator from "@/components/proposals/PricingCalculator";
 import ProposalFormField from "@/components/proposals/ProposalFormField";
 import SectionList from "@/components/proposals/SectionList";
 import SectionPanel from "@/components/proposals/SectionPanel";
@@ -445,12 +446,18 @@ export default function SavedProposalPage() {
     const group = fieldGroups[section.groupIndex];
     if (!group) return null;
 
+    const isPricingSection = section.title.toLowerCase().includes("pricing");
+
     return (
       <>
+        {isPricingSection && (
+          <PricingCalculator accentColor={accentColor} />
+        )}
         {group.fields.map((field, i) => {
           if (field.showIf) {
             const [depKey, depVal] = field.showIf.split(":");
-            if (formData[depKey] !== depVal) return null;
+            const accepted = depVal.split(",");
+            if (!accepted.includes(formData[depKey] ?? "")) return null;
           }
           return (
             <ProposalFormField

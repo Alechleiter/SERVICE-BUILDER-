@@ -313,62 +313,80 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
       );
     }
 
-    // ── Pricing: table + includes rendering ──
+    // ── Pricing: table + includes rendering (supports __OPT__ option headers) ──
     if (upper === "PRICING") {
-      // Group items: __ROW__ starts a block, __INC__ adds includes, anything else is a note
       type PricingBlock = { service: string; cost: string; includes: string[] };
-      const blocks: PricingBlock[] = [];
+      type OptionGroup = { name: string | null; blocks: PricingBlock[] };
+      const optionGroups: OptionGroup[] = [];
       const notes: string[] = [];
-      let cur: PricingBlock | null = null;
+      let curGroup: OptionGroup = { name: null, blocks: [] };
+      let curBlock: PricingBlock | null = null;
+
       s.items.forEach((item) => {
-        if (item.startsWith("__ROW__")) {
-          if (cur) blocks.push(cur);
+        if (item.startsWith("__OPT__")) {
+          if (curBlock) { curGroup.blocks.push(curBlock); curBlock = null; }
+          if (curGroup.blocks.length > 0) optionGroups.push(curGroup);
+          curGroup = { name: item.replace("__OPT__", ""), blocks: [] };
+        } else if (item.startsWith("__ROW__")) {
+          if (curBlock) curGroup.blocks.push(curBlock);
           const parts = item.replace("__ROW__", "").split("|");
-          cur = { service: parts[0] || "", cost: parts[1] || "", includes: [] };
-          if (parts[2]?.trim()) cur.includes.push(parts[2].trim()); // backward compat
-        } else if (item.startsWith("__INC__") && cur) {
-          cur.includes.push(item.replace("__INC__", ""));
+          curBlock = { service: parts[0] || "", cost: parts[1] || "", includes: [] };
+          if (parts[2]?.trim()) curBlock.includes.push(parts[2].trim());
+        } else if (item.startsWith("__INC__") && curBlock) {
+          curBlock.includes.push(item.replace("__INC__", ""));
         } else {
-          if (cur) { blocks.push(cur); cur = null; }
+          if (curBlock) { curGroup.blocks.push(curBlock); curBlock = null; }
           notes.push(item);
         }
       });
-      if (cur) blocks.push(cur);
+      if (curBlock) curGroup.blocks.push(curBlock);
+      if (curGroup.blocks.length > 0) optionGroups.push(curGroup);
+
+      const renderPricingTable = (blocks: PricingBlock[], key: string) => (
+        <div key={key} style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Arial',sans-serif", fontSize: 13, margin: "8px 0 12px" }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid #ddd" }}>
+                <th style={{ textAlign: "left", padding: "6px 10px", fontWeight: 700, color: "#666", textTransform: "uppercase", fontSize: 10 }}>Service</th>
+                <th style={{ textAlign: "right", padding: "6px 10px", fontWeight: 700, color: "#666", textTransform: "uppercase", fontSize: 10 }}>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {blocks.map((b, bi) => (
+                <React.Fragment key={bi}>
+                  <tr style={{ borderBottom: b.includes.length ? "none" : "1px solid #eee" }}>
+                    <td style={{ padding: "6px 10px", fontWeight: 600 }}>{b.service}</td>
+                    <td style={{ padding: "6px 10px", fontWeight: 700, textAlign: "right" }}>{b.cost}</td>
+                  </tr>
+                  {b.includes.length > 0 && (
+                    <tr style={{ borderBottom: "1px solid #eee" }}>
+                      <td colSpan={2} style={{ padding: "2px 10px 8px 24px" }}>
+                        {b.includes.map((inc, ii) => (
+                          <div key={ii} style={{ fontSize: 12, color: "#555", margin: "0 0 2px" }}>{"\u2022"} {inc}</div>
+                        ))}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
 
       return (
         <div key={i} style={{ marginBottom: 26 }}>
           <h2 style={headingStyle}>{s.heading}</h2>
-          {blocks.length > 0 && (
-            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Arial',sans-serif", fontSize: 13, margin: "8px 0 12px" }}>
-                <thead>
-                  <tr style={{ borderBottom: "2px solid #ddd" }}>
-                    <th style={{ textAlign: "left", padding: "6px 10px", fontWeight: 700, color: "#666", textTransform: "uppercase", fontSize: 10 }}>Service</th>
-                    <th style={{ textAlign: "right", padding: "6px 10px", fontWeight: 700, color: "#666", textTransform: "uppercase", fontSize: 10 }}>Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {blocks.map((b, bi) => (
-                    <React.Fragment key={bi}>
-                      <tr style={{ borderBottom: b.includes.length ? "none" : "1px solid #eee" }}>
-                        <td style={{ padding: "6px 10px", fontWeight: 600 }}>{b.service}</td>
-                        <td style={{ padding: "6px 10px", fontWeight: 700, textAlign: "right" }}>{b.cost}</td>
-                      </tr>
-                      {b.includes.length > 0 && (
-                        <tr style={{ borderBottom: "1px solid #eee" }}>
-                          <td colSpan={2} style={{ padding: "2px 10px 8px 24px" }}>
-                            {b.includes.map((inc, ii) => (
-                              <div key={ii} style={{ fontSize: 12, color: "#555", margin: "0 0 2px" }}>{"\u2022"} {inc}</div>
-                            ))}
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
+          {optionGroups.map((og, oi) => (
+            <div key={oi} style={{ marginBottom: og.name ? 16 : 0 }}>
+              {og.name && (
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: cc, margin: "14px 0 4px", fontFamily: "'Arial',sans-serif", borderBottom: `2px solid ${cc}22`, paddingBottom: 4 }}>
+                  {og.name}
+                </h3>
+              )}
+              {renderPricingTable(og.blocks, `opt-${oi}`)}
             </div>
-          )}
+          ))}
           {notes.map((item, j) => (
             <div key={j} style={{ marginBottom: 8, fontSize: 14, color: "#333", paddingLeft: 16, position: "relative", fontFamily: "'Arial',sans-serif" }}>
               <span style={{ position: "absolute", left: 0, color: cc, fontWeight: 700 }}>{"\u2022"}</span>{item}

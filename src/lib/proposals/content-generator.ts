@@ -23,6 +23,14 @@ export function hasInspectionPricing(data: FormData): boolean {
     data.ir_recurring_cost?.trim() ||
     data.ir_monthly_total?.trim() ||
     data.ir_onetime_cost?.trim() ||
+    data.ir_b_initial_cost?.trim() ||
+    data.ir_b_recurring_cost?.trim() ||
+    data.ir_b_monthly_total?.trim() ||
+    data.ir_b_onetime_cost?.trim() ||
+    data.ir_c_initial_cost?.trim() ||
+    data.ir_c_recurring_cost?.trim() ||
+    data.ir_c_monthly_total?.trim() ||
+    data.ir_c_onetime_cost?.trim() ||
     data.ir_pricing_notes?.trim()
   );
 }
@@ -409,23 +417,57 @@ export function generateContent(templateKey: TemplateId, data: FormData): Propos
         sections.push({ heading: "Covered Pests", items: coveredPests });
       }
 
-      // ── Optional Pricing ──
+      // ── Optional Pricing (supports up to 3 options) ──
       if (hasInspectionPricing(data)) {
         const pricingItems: string[] = [];
         const pushRow = (label: string, costKey: string, includesKey: string) => {
           if (!data[costKey]) return;
           const v = Number(data[costKey]);
           const cost = isNaN(v) ? data[costKey].trim() : formatCurrency(v);
-          // includes can be JSON array (bullet-list) or plain string (backward compat)
           let incArr = safeJsonArray(data[includesKey]);
           if (incArr.length === 0 && data[includesKey]?.trim()) incArr = [data[includesKey].trim()];
           pricingItems.push(`__ROW__${label}|${cost}`);
           incArr.forEach(inc => pricingItems.push(`__INC__${inc}`));
         };
-        pushRow("Initial Service", "ir_initial_cost", "ir_initial_includes");
-        pushRow("Per Visit", "ir_recurring_cost", "ir_recurring_includes");
-        pushRow("Monthly Total", "ir_monthly_total", "ir_monthly_includes");
-        pushRow("One-Time Service", "ir_onetime_cost", "ir_onetime_includes");
+        const optCount = parseInt(data.ir_option_count || "1", 10) || 1;
+
+        // Option A
+        const optAName = data.ir_option_a_name?.trim();
+        const hasOptA = !!(data.ir_initial_cost?.trim() || data.ir_recurring_cost?.trim() || data.ir_monthly_total?.trim() || data.ir_onetime_cost?.trim());
+        if (hasOptA) {
+          if (optCount > 1) pricingItems.push(`__OPT__${optAName || "Option A"}`);
+          pushRow("Initial Service", "ir_initial_cost", "ir_initial_includes");
+          pushRow("Per Visit", "ir_recurring_cost", "ir_recurring_includes");
+          pushRow("Monthly Total", "ir_monthly_total", "ir_monthly_includes");
+          pushRow("One-Time Service", "ir_onetime_cost", "ir_onetime_includes");
+        }
+
+        // Option B
+        if (optCount >= 2) {
+          const optBName = data.ir_b_name?.trim();
+          const hasOptB = !!(data.ir_b_initial_cost?.trim() || data.ir_b_recurring_cost?.trim() || data.ir_b_monthly_total?.trim() || data.ir_b_onetime_cost?.trim());
+          if (hasOptB) {
+            pricingItems.push(`__OPT__${optBName || "Option B"}`);
+            pushRow("Initial Service", "ir_b_initial_cost", "ir_b_initial_includes");
+            pushRow("Per Visit", "ir_b_recurring_cost", "ir_b_recurring_includes");
+            pushRow("Monthly Total", "ir_b_monthly_total", "ir_b_monthly_includes");
+            pushRow("One-Time Service", "ir_b_onetime_cost", "ir_b_onetime_includes");
+          }
+        }
+
+        // Option C
+        if (optCount >= 3) {
+          const optCName = data.ir_c_name?.trim();
+          const hasOptC = !!(data.ir_c_initial_cost?.trim() || data.ir_c_recurring_cost?.trim() || data.ir_c_monthly_total?.trim() || data.ir_c_onetime_cost?.trim());
+          if (hasOptC) {
+            pricingItems.push(`__OPT__${optCName || "Option C"}`);
+            pushRow("Initial Service", "ir_c_initial_cost", "ir_c_initial_includes");
+            pushRow("Per Visit", "ir_c_recurring_cost", "ir_c_recurring_includes");
+            pushRow("Monthly Total", "ir_c_monthly_total", "ir_c_monthly_includes");
+            pushRow("One-Time Service", "ir_c_onetime_cost", "ir_c_onetime_includes");
+          }
+        }
+
         if (data.ir_pricing_notes) pricingItems.push(data.ir_pricing_notes.trim());
         sections.push({ heading: "Pricing", items: pricingItems });
       }
