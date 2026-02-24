@@ -35,15 +35,32 @@ export function hasInspectionPricing(data: FormData): boolean {
   );
 }
 
-/** Check if any inspection-report scope field is filled */
-function hasInspectionScope(data: FormData): boolean {
+/** Check if any scope field is filled for an option prefix (empty prefix = option A with legacy keys) */
+function hasOptionScope(data: FormData, prefix: string): boolean {
+  const freqKey = prefix ? `ir_${prefix}_frequency` : "ir_service_frequency";
+  const areasKey = prefix ? `ir_${prefix}_areas` : "ir_service_areas";
+  const p1Key = prefix ? `ir_${prefix}_phase1_items` : "ir_phase1_items";
+  const p2Key = prefix ? `ir_${prefix}_phase2_items` : "ir_phase2_items";
   return !!(
-    data.ir_scope_description?.trim() ||
-    data.ir_service_frequency?.trim() ||
-    data.ir_service_areas?.trim() ||
-    safeJsonArray(data.ir_phase1_items).length > 0 ||
-    safeJsonArray(data.ir_phase2_items).length > 0
+    data[freqKey]?.trim() ||
+    data[areasKey]?.trim() ||
+    safeJsonArray(data[p1Key]).length > 0 ||
+    safeJsonArray(data[p2Key]).length > 0
   );
+}
+
+/** Check if any pricing field is filled for an option prefix */
+function hasOptionPricing(data: FormData, prefix: string): boolean {
+  const icKey = prefix ? `ir_${prefix}_initial_cost` : "ir_initial_cost";
+  const rcKey = prefix ? `ir_${prefix}_recurring_cost` : "ir_recurring_cost";
+  const mtKey = prefix ? `ir_${prefix}_monthly_total` : "ir_monthly_total";
+  const ocKey = prefix ? `ir_${prefix}_onetime_cost` : "ir_onetime_cost";
+  return !!(data[icKey]?.trim() || data[rcKey]?.trim() || data[mtKey]?.trim() || data[ocKey]?.trim());
+}
+
+/** Backward compat: check if any inspection-report scope field is filled */
+function hasInspectionScope(data: FormData): boolean {
+  return hasOptionScope(data, "");
 }
 
 /** Build the Inspection Report section if any inspection fields are filled */
@@ -376,39 +393,6 @@ export function generateContent(templateKey: TemplateId, data: FormData): Propos
       const customerRecs = buildCustomerRecsSection(data);
       if (customerRecs) sections.push(customerRecs);
 
-      // ── Optional Scope of Work (turns report into quick quote) ──
-      if (hasInspectionScope(data)) {
-        const scopeItems: string[] = [];
-        // Summary line
-        const scopeParts: string[] = [];
-        if (data.ir_service_frequency) scopeParts.push(`Service frequency: ${data.ir_service_frequency.trim()}`);
-        if (data.ir_service_areas) scopeParts.push(`Service areas: ${data.ir_service_areas.trim()}`);
-        if (scopeParts.length) scopeItems.push(scopeParts.join("  |  "));
-
-        // Backward compat: old free-form scope description
-        if (data.ir_scope_description?.trim()) scopeItems.push(data.ir_scope_description.trim());
-
-        // Phase 1
-        const phase1Items = safeJsonArray(data.ir_phase1_items);
-        if (phase1Items.length > 0) {
-          const p1Title = data.ir_phase1_title?.trim() || "Initial Service";
-          const p1Dur = data.ir_phase1_duration?.trim();
-          scopeItems.push(`__PHASE__${p1Title}${p1Dur ? `  (${p1Dur})` : ""}`);
-          phase1Items.forEach(item => scopeItems.push(`__SUB__${item}`));
-        }
-
-        // Phase 2
-        const phase2Items = safeJsonArray(data.ir_phase2_items);
-        if (phase2Items.length > 0) {
-          const p2Title = data.ir_phase2_title?.trim() || "Ongoing Service";
-          const p2Dur = data.ir_phase2_duration?.trim();
-          scopeItems.push(`__PHASE__${p2Title}${p2Dur ? `  (${p2Dur})` : ""}`);
-          phase2Items.forEach(item => scopeItems.push(`__SUB__${item}`));
-        }
-
-        sections.push({ heading: "Scope of Work", items: scopeItems });
-      }
-
       // ── Covered Pests ──
       const coveredPests = data.covered_pests
         ? data.covered_pests.split(",").map(p => p.trim()).filter(Boolean)
@@ -417,59 +401,124 @@ export function generateContent(templateKey: TemplateId, data: FormData): Propos
         sections.push({ heading: "Covered Pests", items: coveredPests });
       }
 
-      // ── Optional Pricing (supports up to 3 options) ──
-      if (hasInspectionPricing(data)) {
-        const pricingItems: string[] = [];
+      // ── Service Options: combined scope + pricing per option ──
+      const optCount = parseInt(data.ir_option_count || "1", 10) || 1;
+
+      // Helper: build scope items for an option (prefix="" for Option A legacy keys, "b" for B, "c" for C)
+      const buildScopeItems = (prefix: string): string[] => {
+        const items: string[] = [];
+        const freqKey = prefix ? `ir_${prefix}_frequency` : "ir_service_frequency";
+        const areasKey = prefix ? `ir_${prefix}_areas` : "ir_service_areas";
+        const p1TitleKey = prefix ? `ir_${prefix}_phase1_title` : "ir_phase1_title";
+        const p1DurKey = prefix ? `ir_${prefix}_phase1_duration` : "ir_phase1_duration";
+        const p1ItemsKey = prefix ? `ir_${prefix}_phase1_items` : "ir_phase1_items";
+        const p2TitleKey = prefix ? `ir_${prefix}_phase2_title` : "ir_phase2_title";
+        const p2DurKey = prefix ? `ir_${prefix}_phase2_duration` : "ir_phase2_duration";
+        const p2ItemsKey = prefix ? `ir_${prefix}_phase2_items` : "ir_phase2_items";
+
+        // Summary line
+        const parts: string[] = [];
+        if (data[freqKey]?.trim()) parts.push(`Service frequency: ${data[freqKey].trim()}`);
+        if (data[areasKey]?.trim()) parts.push(`Service areas: ${data[areasKey].trim()}`);
+        if (parts.length) items.push(parts.join("  |  "));
+
+        // Backward compat: old free-form scope description
+        if (!prefix && data.ir_scope_description?.trim()) items.push(data.ir_scope_description.trim());
+
+        // Phase 1
+        const phase1Items = safeJsonArray(data[p1ItemsKey]);
+        if (phase1Items.length > 0) {
+          const p1Title = data[p1TitleKey]?.trim() || "Initial Service";
+          const p1Dur = data[p1DurKey]?.trim();
+          items.push(`__PHASE__${p1Title}${p1Dur ? `  (${p1Dur})` : ""}`);
+          phase1Items.forEach(item => items.push(`__SUB__${item}`));
+        }
+
+        // Phase 2
+        const phase2Items = safeJsonArray(data[p2ItemsKey]);
+        if (phase2Items.length > 0) {
+          const p2Title = data[p2TitleKey]?.trim() || "Ongoing Service";
+          const p2Dur = data[p2DurKey]?.trim();
+          items.push(`__PHASE__${p2Title}${p2Dur ? `  (${p2Dur})` : ""}`);
+          phase2Items.forEach(item => items.push(`__SUB__${item}`));
+        }
+
+        return items;
+      };
+
+      // Helper: build pricing rows for an option
+      const pushPricingRows = (prefix: string, items: string[]) => {
+        const icKey = prefix ? `ir_${prefix}_initial_cost` : "ir_initial_cost";
+        const iiKey = prefix ? `ir_${prefix}_initial_includes` : "ir_initial_includes";
+        const rcKey = prefix ? `ir_${prefix}_recurring_cost` : "ir_recurring_cost";
+        const riKey = prefix ? `ir_${prefix}_recurring_includes` : "ir_recurring_includes";
+        const mtKey = prefix ? `ir_${prefix}_monthly_total` : "ir_monthly_total";
+        const miKey = prefix ? `ir_${prefix}_monthly_includes` : "ir_monthly_includes";
+        const ocKey = prefix ? `ir_${prefix}_onetime_cost` : "ir_onetime_cost";
+        const oiKey = prefix ? `ir_${prefix}_onetime_includes` : "ir_onetime_includes";
+
         const pushRow = (label: string, costKey: string, includesKey: string) => {
           if (!data[costKey]) return;
           const v = Number(data[costKey]);
           const cost = isNaN(v) ? data[costKey].trim() : formatCurrency(v);
           let incArr = safeJsonArray(data[includesKey]);
           if (incArr.length === 0 && data[includesKey]?.trim()) incArr = [data[includesKey].trim()];
-          pricingItems.push(`__ROW__${label}|${cost}`);
-          incArr.forEach(inc => pricingItems.push(`__INC__${inc}`));
+          items.push(`__ROW__${label}|${cost}`);
+          incArr.forEach(inc => items.push(`__INC__${inc}`));
         };
-        const optCount = parseInt(data.ir_option_count || "1", 10) || 1;
 
-        // Option A
-        const optAName = data.ir_option_a_name?.trim();
-        const hasOptA = !!(data.ir_initial_cost?.trim() || data.ir_recurring_cost?.trim() || data.ir_monthly_total?.trim() || data.ir_onetime_cost?.trim());
-        if (hasOptA) {
-          if (optCount > 1) pricingItems.push(`__OPT__${optAName || "Option A"}`);
-          pushRow("Initial Service", "ir_initial_cost", "ir_initial_includes");
-          pushRow("Per Visit", "ir_recurring_cost", "ir_recurring_includes");
-          pushRow("Monthly Total", "ir_monthly_total", "ir_monthly_includes");
-          pushRow("One-Time Service", "ir_onetime_cost", "ir_onetime_includes");
+        pushRow("Initial Service", icKey, iiKey);
+        pushRow("Per Visit", rcKey, riKey);
+        pushRow("Monthly Total", mtKey, miKey);
+        pushRow("One-Time Service", ocKey, oiKey);
+      };
+
+      // Define options: [prefix, nameKey, fallbackName]
+      const optionDefs: [string, string, string][] = [
+        ["", "ir_option_a_name", "Option A"],
+        ["b", "ir_b_name", "Option B"],
+        ["c", "ir_c_name", "Option C"],
+      ];
+
+      if (optCount === 1) {
+        // Single option: keep separate "Scope of Work" + "Pricing" sections (backward compat)
+        if (hasOptionScope(data, "")) {
+          sections.push({ heading: "Scope of Work", items: buildScopeItems("") });
         }
+        if (hasOptionPricing(data, "") || data.ir_pricing_notes?.trim()) {
+          const pricingItems: string[] = [];
+          pushPricingRows("", pricingItems);
+          if (data.ir_pricing_notes) pricingItems.push(data.ir_pricing_notes.trim());
+          sections.push({ heading: "Pricing", items: pricingItems });
+        }
+      } else {
+        // Multiple options: each option is a self-contained section with scope + pricing
+        for (let oi = 0; oi < optCount; oi++) {
+          const [prefix, nameKey, fallback] = optionDefs[oi];
+          const hasScope = hasOptionScope(data, prefix);
+          const hasPricing = hasOptionPricing(data, prefix);
+          if (!hasScope && !hasPricing) continue;
 
-        // Option B
-        if (optCount >= 2) {
-          const optBName = data.ir_b_name?.trim();
-          const hasOptB = !!(data.ir_b_initial_cost?.trim() || data.ir_b_recurring_cost?.trim() || data.ir_b_monthly_total?.trim() || data.ir_b_onetime_cost?.trim());
-          if (hasOptB) {
-            pricingItems.push(`__OPT__${optBName || "Option B"}`);
-            pushRow("Initial Service", "ir_b_initial_cost", "ir_b_initial_includes");
-            pushRow("Per Visit", "ir_b_recurring_cost", "ir_b_recurring_includes");
-            pushRow("Monthly Total", "ir_b_monthly_total", "ir_b_monthly_includes");
-            pushRow("One-Time Service", "ir_b_onetime_cost", "ir_b_onetime_includes");
+          const optName = data[nameKey]?.trim() || fallback;
+          const items: string[] = [];
+
+          // Scope portion
+          if (hasScope) {
+            items.push(...buildScopeItems(prefix));
           }
-        }
 
-        // Option C
-        if (optCount >= 3) {
-          const optCName = data.ir_c_name?.trim();
-          const hasOptC = !!(data.ir_c_initial_cost?.trim() || data.ir_c_recurring_cost?.trim() || data.ir_c_monthly_total?.trim() || data.ir_c_onetime_cost?.trim());
-          if (hasOptC) {
-            pricingItems.push(`__OPT__${optCName || "Option C"}`);
-            pushRow("Initial Service", "ir_c_initial_cost", "ir_c_initial_includes");
-            pushRow("Per Visit", "ir_c_recurring_cost", "ir_c_recurring_includes");
-            pushRow("Monthly Total", "ir_c_monthly_total", "ir_c_monthly_includes");
-            pushRow("One-Time Service", "ir_c_onetime_cost", "ir_c_onetime_includes");
+          // Pricing portion (separated by marker)
+          if (hasPricing) {
+            items.push("__PRICING_START__");
+            pushPricingRows(prefix, items);
           }
-        }
 
-        if (data.ir_pricing_notes) pricingItems.push(data.ir_pricing_notes.trim());
-        sections.push({ heading: "Pricing", items: pricingItems });
+          sections.push({ heading: `${optName}`, items });
+        }
+        // Notes at the end as a separate section if present
+        if (data.ir_pricing_notes?.trim()) {
+          sections.push({ heading: "Pricing Notes", items: [data.ir_pricing_notes.trim()] });
+        }
       }
 
       return {

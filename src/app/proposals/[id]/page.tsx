@@ -446,11 +446,11 @@ export default function SavedProposalPage() {
     const group = fieldGroups[section.groupIndex];
     if (!group) return null;
 
-    const isPricingSection = section.title.toLowerCase().includes("pricing");
+    const showCalc = section.title.toLowerCase().includes("pricing") || section.title.toLowerCase().includes("service options");
 
     return (
       <>
-        {isPricingSection && (
+        {showCalc && (
           <PricingCalculator accentColor={accentColor} />
         )}
         {group.fields.map((field, i) => {

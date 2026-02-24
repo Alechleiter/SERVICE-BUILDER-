@@ -17,6 +17,7 @@ const SECTION_ORDER: Record<string, number> = {
   "Pest Findings": 3.5,
   "Scope of Work": 4,
   "Findings & Notes": 4,
+  "Service Options": 5,
   "Service Schedule": 5,
   "Service Planning": 5,
   "Pricing": 6,
@@ -96,7 +97,8 @@ export function computeSectionCompletion(
     // Skip conditionally hidden fields
     if (f.showIf) {
       const [depKey, depVal] = f.showIf.split(":");
-      if (formData[depKey] !== depVal) continue;
+      const accepted = depVal.split(",");
+      if (!accepted.includes(formData[depKey] ?? "")) continue;
     }
     total++;
     const val = formData[f.key]?.trim();

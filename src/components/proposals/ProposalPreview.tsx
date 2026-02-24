@@ -239,6 +239,7 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
     "INTERIOR SERVICES", "ADDITIONAL AREA", "EQUIPMENT SUMMARY",
     "PRICING & SCHEDULE", "ADDITIONAL NOTES", "COVERED PESTS",
     "TECHNICIAN", "CUSTOMER RECOMMENDATIONS", "TECH START",
+    "OPTION A", "OPTION B", "OPTION C", "SERVICE OPTIONS",
   ];
 
   const earlySections: typeof content.sections = [];
@@ -309,6 +310,89 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
           <div style={{ fontSize: 14, color: "#333", paddingLeft: 16, fontFamily: "'Arial',sans-serif" }}>
             {s.items.join(", ")}
           </div>
+        </div>
+      );
+    }
+
+    // ── Combined option section: scope + __PRICING_START__ + pricing ──
+    if (s.items.some(it => it === "__PRICING_START__")) {
+      const pricingIdx = s.items.indexOf("__PRICING_START__");
+      const scopeItems = s.items.slice(0, pricingIdx);
+      const pricingRawItems = s.items.slice(pricingIdx + 1);
+
+      // Parse pricing blocks
+      type PBlock = { service: string; cost: string; includes: string[] };
+      const pBlocks: PBlock[] = [];
+      const pNotes: string[] = [];
+      let pCur: PBlock | null = null;
+      pricingRawItems.forEach((item) => {
+        if (item.startsWith("__ROW__")) {
+          if (pCur) pBlocks.push(pCur);
+          const parts = item.replace("__ROW__", "").split("|");
+          pCur = { service: parts[0] || "", cost: parts[1] || "", includes: [] };
+        } else if (item.startsWith("__INC__") && pCur) {
+          pCur.includes.push(item.replace("__INC__", ""));
+        } else {
+          if (pCur) { pBlocks.push(pCur); pCur = null; }
+          pNotes.push(item);
+        }
+      });
+      if (pCur) pBlocks.push(pCur);
+
+      return (
+        <div key={i} style={{ marginBottom: 26 }}>
+          <h2 style={headingStyle}>{s.heading}</h2>
+          {/* Scope portion */}
+          {scopeItems.map((item, j) => {
+            if (item.startsWith("__PHASE__")) {
+              return <div key={`s${j}`} style={{ fontSize: 14, fontWeight: 700, color: "#333", margin: "14px 0 6px", fontFamily: "'Arial',sans-serif" }}>{item.replace("__PHASE__", "")}</div>;
+            }
+            if (item.startsWith("__SUB__")) {
+              return (
+                <div key={`s${j}`} style={{ marginBottom: 5, fontSize: 14, color: "#333", paddingLeft: 24, position: "relative", fontFamily: "'Arial',sans-serif" }}>
+                  <span style={{ position: "absolute", left: 8, color: cc, fontWeight: 700 }}>{"\u2022"}</span>{item.replace("__SUB__", "")}
+                </div>
+              );
+            }
+            return <div key={`s${j}`} style={{ marginBottom: 6, fontSize: 14, color: "#333", paddingLeft: 16, fontFamily: "'Arial',sans-serif" }}>{item}</div>;
+          })}
+          {/* Pricing portion */}
+          {pBlocks.length > 0 && (
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", marginTop: 12 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Arial',sans-serif", fontSize: 13, margin: "8px 0 12px" }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid #ddd" }}>
+                    <th style={{ textAlign: "left", padding: "6px 10px", fontWeight: 700, color: "#666", textTransform: "uppercase", fontSize: 10 }}>Service</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", fontWeight: 700, color: "#666", textTransform: "uppercase", fontSize: 10 }}>Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pBlocks.map((b, bi) => (
+                    <React.Fragment key={bi}>
+                      <tr style={{ borderBottom: b.includes.length ? "none" : "1px solid #eee" }}>
+                        <td style={{ padding: "6px 10px", fontWeight: 600 }}>{b.service}</td>
+                        <td style={{ padding: "6px 10px", fontWeight: 700, textAlign: "right" }}>{b.cost}</td>
+                      </tr>
+                      {b.includes.length > 0 && (
+                        <tr style={{ borderBottom: "1px solid #eee" }}>
+                          <td colSpan={2} style={{ padding: "2px 10px 8px 24px" }}>
+                            {b.includes.map((inc, ii) => (
+                              <div key={ii} style={{ fontSize: 12, color: "#555", margin: "0 0 2px" }}>{"\u2022"} {inc}</div>
+                            ))}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {pNotes.map((item, j) => (
+            <div key={`n${j}`} style={{ marginBottom: 8, fontSize: 14, color: "#333", paddingLeft: 16, position: "relative", fontFamily: "'Arial',sans-serif" }}>
+              <span style={{ position: "absolute", left: 0, color: cc, fontWeight: 700 }}>{"\u2022"}</span>{item}
+            </div>
+          ))}
         </div>
       );
     }

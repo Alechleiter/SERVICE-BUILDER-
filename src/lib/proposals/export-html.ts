@@ -308,6 +308,7 @@ export function buildProposalExportHTML(
     "INTERIOR SERVICES", "ADDITIONAL AREA", "EQUIPMENT SUMMARY",
     "PRICING & SCHEDULE", "ADDITIONAL NOTES", "COVERED PESTS",
     "TECHNICIAN", "CUSTOMER RECOMMENDATIONS", "TECH START",
+    "OPTION A", "OPTION B", "OPTION C", "SERVICE OPTIONS",
   ];
 
   const earlySections: typeof content.sections = [];
@@ -363,6 +364,74 @@ export function buildProposalExportHTML(
       if (!forWord) html += `<div class="pb-avoid" style="page-break-inside:avoid;">`;
       html += `<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${color};border-bottom:1px solid ${color}44;padding-bottom:5px;margin:20px 0 10px;">${s.heading}</h2>`;
       html += `<p style="font-size:13px;color:#333;margin:0 0 6px;padding-left:14px;">${s.items.join(", ")}</p>`;
+      if (!forWord) html += `</div>`;
+      return;
+    }
+
+    // ── Combined option section: scope + __PRICING_START__ + pricing ──
+    if (s.items.some(it => it === "__PRICING_START__")) {
+      const pricingIdx = s.items.indexOf("__PRICING_START__");
+      const scopeItems = s.items.slice(0, pricingIdx);
+      const pricingRawItems = s.items.slice(pricingIdx + 1);
+
+      type PBlock = { service: string; cost: string; includes: string[] };
+      const pBlocks: PBlock[] = [];
+      const pNotes: string[] = [];
+      let pCur: PBlock | null = null;
+      pricingRawItems.forEach((item) => {
+        if (item.startsWith("__ROW__")) {
+          if (pCur) pBlocks.push(pCur);
+          const parts = item.replace("__ROW__", "").split("|");
+          pCur = { service: parts[0] || "", cost: parts[1] || "", includes: [] };
+        } else if (item.startsWith("__INC__") && pCur) {
+          pCur.includes.push(item.replace("__INC__", ""));
+        } else {
+          if (pCur) { pBlocks.push(pCur); pCur = null; }
+          pNotes.push(item);
+        }
+      });
+      if (pCur) pBlocks.push(pCur);
+
+      if (!forWord) html += `<div class="pb-avoid" style="page-break-inside:avoid;">`;
+      html += `<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${color};border-bottom:1px solid ${color}44;padding-bottom:5px;margin:20px 0 10px;">${s.heading}</h2>`;
+
+      // Scope portion
+      scopeItems.forEach((item) => {
+        if (item.startsWith("__PHASE__")) {
+          html += `<p style="font-size:13px;font-weight:700;color:#333;margin:12px 0 4px;">${item.replace("__PHASE__", "")}</p>`;
+        } else if (item.startsWith("__SUB__")) {
+          html += `<p style="font-size:13px;color:#333;margin:0 0 4px;padding-left:22px;">\u2022 ${item.replace("__SUB__", "")}</p>`;
+        } else {
+          html += `<p style="font-size:13px;color:#333;margin:0 0 6px;padding-left:14px;">${item}</p>`;
+        }
+      });
+
+      // Pricing portion
+      if (pBlocks.length > 0) {
+        html += `<table style="width:100%;border-collapse:collapse;margin:12px 0 12px;font-size:13px;" cellpadding="0" cellspacing="0">`;
+        html += `<tr style="border-bottom:2px solid #ddd;">`;
+        html += `<th style="text-align:left;padding:6px 10px;font-weight:700;color:#666;text-transform:uppercase;font-size:10px;">Service</th>`;
+        html += `<th style="text-align:right;padding:6px 10px;font-weight:700;color:#666;text-transform:uppercase;font-size:10px;">Cost</th>`;
+        html += `</tr>`;
+        pBlocks.forEach((b) => {
+          html += `<tr style="border-bottom:${b.includes.length ? "none" : "1px solid #eee"};">`;
+          html += `<td style="padding:6px 10px;font-weight:600;">${b.service}</td>`;
+          html += `<td style="padding:6px 10px;font-weight:700;text-align:right;">${b.cost}</td>`;
+          html += `</tr>`;
+          if (b.includes.length > 0) {
+            html += `<tr style="border-bottom:1px solid #eee;">`;
+            html += `<td colspan="2" style="padding:2px 10px 8px 24px;">`;
+            b.includes.forEach((inc) => {
+              html += `<p style="font-size:12px;color:#555;margin:0 0 2px;">\u2022 ${inc}</p>`;
+            });
+            html += `</td></tr>`;
+          }
+        });
+        html += `</table>`;
+      }
+      pNotes.forEach((item) => {
+        html += `<p style="font-size:13px;color:#333;margin:0 0 6px;padding-left:14px;">\u2022 ${item}</p>`;
+      });
       if (!forWord) html += `</div>`;
       return;
     }
