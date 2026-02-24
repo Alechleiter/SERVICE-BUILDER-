@@ -3,7 +3,7 @@ import { useState, useCallback } from "react";
 import { useAuth } from "./useAuth";
 import { createClient } from "@/lib/supabase/client";
 import type { Proposal, ProposalInsert, ProposalUpdate, ProposalSnapshotInsert } from "@/lib/supabase/database.types";
-import type { PhotoEntry, MapData } from "@/lib/proposals/types";
+import type { PhotoEntry, MapData, ChartEntry } from "@/lib/proposals/types";
 import type { Json } from "@/lib/supabase/database.types";
 
 export interface ProposalListItem {
@@ -23,6 +23,7 @@ export interface ProposalListItem {
  */
 const PHOTOS_KEY = "__photos_json";
 const MAP_KEY = "__map_data_json";
+const CHARTS_KEY = "__charts_json";
 
 export function useProposals() {
   const { user } = useAuth();
@@ -61,8 +62,9 @@ export function useProposals() {
       status?: "draft" | "sent" | "accepted" | "declined";
       clientId?: string;
       sessionId?: string;
-      mapData?: MapData | null;
+      mapData?: MapData[];
       photos?: PhotoEntry[];
+      charts?: ChartEntry[];
     }): Promise<string | null> => {
       if (!user) {
         const msg = "Save failed: not logged in. Please sign in and try again.";
@@ -87,16 +89,28 @@ export function useProposals() {
         }
       }
 
-      // Store mapData as JSON inside form_data (stripped of huge imageSrc)
-      if (proposal.mapData) {
+      // Store mapData array as JSON inside form_data (stripped of huge imageSrc)
+      if (proposal.mapData && proposal.mapData.length > 0) {
         try {
-          const cleaned = JSON.parse(JSON.stringify(proposal.mapData));
-          if (cleaned.imageSrc && cleaned.imageSrc.length > 500) {
-            cleaned.imageSrc = cleaned.imageSrc.substring(0, 200);
-          }
+          const cleaned = proposal.mapData.map((md) => {
+            const c = JSON.parse(JSON.stringify(md));
+            if (c.imageSrc && c.imageSrc.length > 500) {
+              c.imageSrc = c.imageSrc.substring(0, 200);
+            }
+            return c;
+          });
           formDataForDb[MAP_KEY] = JSON.stringify(cleaned);
         } catch (e) {
           console.error("[useProposals] Failed to serialize mapData:", e);
+        }
+      }
+
+      // Store charts as JSON inside form_data
+      if (proposal.charts && proposal.charts.length > 0) {
+        try {
+          formDataForDb[CHARTS_KEY] = JSON.stringify(proposal.charts);
+        } catch (e) {
+          console.error("[useProposals] Failed to serialize charts:", e);
         }
       }
 
@@ -160,7 +174,7 @@ export function useProposals() {
   );
 
   const load = useCallback(
-    async (id: string): Promise<{ proposal: Proposal; photos: PhotoEntry[]; mapData: MapData | null } | null> => {
+    async (id: string): Promise<{ proposal: Proposal; photos: PhotoEntry[]; mapData: MapData[]; charts: ChartEntry[] } | null> => {
       if (!user) return null;
       const supabase = createClient();
 
@@ -181,7 +195,8 @@ export function useProposals() {
       // Extract photos and mapData from form_data
       const rawFormData = (proposal.form_data ?? {}) as Record<string, string>;
       let photos: PhotoEntry[] = [];
-      let mapData: MapData | null = null;
+      let mapData: MapData[] = [];
+      let charts: ChartEntry[] = [];
 
       // Parse embedded photos
       if (rawFormData[PHOTOS_KEY]) {
@@ -193,26 +208,41 @@ export function useProposals() {
         }
       }
 
-      // Parse embedded mapData
+      // Parse embedded mapData (backward compat: old single object → wrap in array)
       if (rawFormData[MAP_KEY]) {
         try {
-          mapData = JSON.parse(rawFormData[MAP_KEY]) as MapData;
+          const parsed = JSON.parse(rawFormData[MAP_KEY]);
+          if (Array.isArray(parsed)) {
+            mapData = parsed as MapData[];
+          } else if (parsed && typeof parsed === "object" && "fileName" in parsed) {
+            // Old single-object format — wrap in array
+            mapData = [parsed as MapData];
+          }
         } catch (e) {
           console.error("[useProposals] Failed to parse embedded mapData:", e);
+        }
+      }
+
+      // Parse embedded charts
+      if (rawFormData[CHARTS_KEY]) {
+        try {
+          charts = JSON.parse(rawFormData[CHARTS_KEY]) as ChartEntry[];
+        } catch (e) {
+          console.error("[useProposals] Failed to parse embedded charts:", e);
         }
       }
 
       // Strip internal keys from form_data so pages get clean formData
       const cleanFormData: Record<string, string> = {};
       for (const [k, v] of Object.entries(rawFormData)) {
-        if (k !== PHOTOS_KEY && k !== MAP_KEY) {
+        if (k !== PHOTOS_KEY && k !== MAP_KEY && k !== CHARTS_KEY) {
           cleanFormData[k] = v;
         }
       }
       // Override form_data on the proposal with cleaned version
       const cleanProposal = { ...proposal, form_data: cleanFormData as unknown as Json };
 
-      return { proposal: cleanProposal as Proposal, photos, mapData };
+      return { proposal: cleanProposal as Proposal, photos, mapData, charts };
     },
     [user],
   );

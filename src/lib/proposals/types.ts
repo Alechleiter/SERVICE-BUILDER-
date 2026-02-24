@@ -105,6 +105,10 @@ export interface DrawingStroke {
 }
 
 export interface MapData {
+  /** Unique ID for this diagram (used in multi-map arrays) */
+  id?: number;
+  /** Display name for this map diagram, e.g. "Front of House" */
+  title?: string;
   /** base64 image or empty string for blank canvas */
   imageSrc: string;
   /** file name or "blank-canvas" */
@@ -115,4 +119,22 @@ export interface MapData {
   /** Aspect ratio hint for blank canvas */
   canvasWidth?: number;
   canvasHeight?: number;
+}
+
+// ── Charts ──────────────────────────────────────────────
+
+export type ChartType = "bar" | "pie" | "doughnut";
+
+export interface ChartDataRow {
+  label: string;
+  value: number;
+  color: string;
+}
+
+export interface ChartEntry {
+  id: number;
+  type: ChartType;
+  title: string;
+  caption: string;
+  data: ChartDataRow[];
 }

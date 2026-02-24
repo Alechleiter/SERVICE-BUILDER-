@@ -11,6 +11,7 @@ const SECTION_ORDER: Record<string, number> = {
   "Property Details": 0,
   // "Inspection Photos" → injected at 1
   // "Site Map & Equipment" → injected at 2
+  // "Data Charts" → injected at 2.5
   "Treatment Units": 3, // bed bug only
   "Inspection Assessment": 3,
   "Pest Findings": 3.5,
@@ -42,6 +43,7 @@ const SECTION_ICONS: Record<string, string> = {
   "Cost": "\u{1F4B0}",
   "Technician Instructions": "\u{1F527}",
   "Customer Recommendations": "\u{1F4A1}",
+  "Data Charts": "\u{1F4CA}",
   General: "\u{1F4DD}",
 };
 
@@ -56,7 +58,7 @@ export interface SectionItem {
   icon: string;
   filled: number;
   total: number;
-  isSpecial?: "photos" | "map";
+  isSpecial?: "photos" | "map" | "charts";
   /** Original field group index (for mapping back to fields) */
   groupIndex: number;
   /** Sort priority */
@@ -132,8 +134,10 @@ export function buildSectionList(
   formData: Record<string, string>,
   options: {
     photoCount: number;
-    markerCount: number;
+    mapCount: number;
+    totalMarkerCount: number;
     showMap: boolean;
+    chartCount?: number;
   },
 ): SectionItem[] {
   const groups = groupFieldsBySection(fields);
@@ -165,19 +169,34 @@ export function buildSectionList(
     order: 1,
   });
 
-  // Inject Map section (only for non-bed-bug templates)
+  // Inject Map section
   if (options.showMap) {
+    const mapTitle = options.mapCount > 0
+      ? `Site Maps (${options.mapCount})`
+      : "Site Maps";
     items.push({
       id: "map",
-      title: "Site Map & Equipment",
+      title: mapTitle,
       icon: getSectionIcon("Site Map & Equipment"),
-      filled: options.markerCount,
-      total: options.markerCount || 0,
+      filled: options.totalMarkerCount,
+      total: options.totalMarkerCount || 0,
       isSpecial: "map",
       groupIndex: -1,
       order: 2,
     });
   }
+
+  // Inject Charts section
+  items.push({
+    id: "charts",
+    title: "Data Charts",
+    icon: getSectionIcon("Data Charts"),
+    filled: options.chartCount ?? 0,
+    total: options.chartCount ?? 0,
+    isSpecial: "charts",
+    groupIndex: -1,
+    order: 2.5,
+  });
 
   // Sort by workflow order (stable sort preserves insertion order for same priority)
   items.sort((a, b) => a.order - b.order);

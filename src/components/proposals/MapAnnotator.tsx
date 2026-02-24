@@ -767,7 +767,7 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <div style={{ fontSize: 11, color: "var(--text4)", marginTop: 2 }}>
-          {mapData
+          {mapData && (mapData.imageSrc || mapData.fileName || mapData.markers.length > 0 || (mapData.drawings && mapData.drawings.length > 0))
             ? mode === "stamp"
               ? "Select a marker, then click map to place"
               : mode === "draw"
@@ -775,7 +775,7 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
                 : "Click, lasso, drag to move, handles to resize"
             : "Upload a floor plan or draw from scratch"}
         </div>
-        {mapData && (
+        {mapData && (mapData.imageSrc || mapData.fileName) && (
           <button onClick={() => onMapDataChange(null)}
             style={{ background: "none", border: "none", color: "#f85149", cursor: "pointer", fontSize: 11, flexShrink: 0 }}>
             {"\u2715"} Remove Map
@@ -784,7 +784,7 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
       </div>
 
       {/* ── START SCREEN: Upload or Draw from Scratch ── */}
-      {!mapData && (
+      {(!mapData || (!mapData.imageSrc && !mapData.fileName && mapData.markers.length === 0 && (!mapData.drawings || mapData.drawings.length === 0))) && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: 10, marginBottom: 8 }}>
             <div
@@ -825,7 +825,7 @@ export default function MapAnnotator({ mapData, onMapDataChange, accentColor }: 
       )}
 
       {/* ── CAD WORKSPACE ── */}
-      {mapData && (() => {
+      {mapData && (mapData.imageSrc || mapData.fileName || mapData.markers.length > 0 || (mapData.drawings && mapData.drawings.length > 0)) && (() => {
         const workspaceContent = (
           <>
           {/* ── MODE TOGGLE + EXPAND ── */}

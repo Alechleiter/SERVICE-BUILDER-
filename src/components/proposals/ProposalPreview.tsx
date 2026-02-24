@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 import type { TemplateId, TemplateDefinition, PhotoEntry, MapData, MapMarker, DrawingStroke } from "@/lib/proposals/types";
 import { generateContent, hasInspectionPricing } from "@/lib/proposals/content-generator";
 import { groupByZone } from "@/lib/proposals/zone-presets";
@@ -212,14 +213,15 @@ interface ProposalPreviewProps {
   templateConfig: TemplateDefinition;
   photos: PhotoEntry[];
   inspectionDate: string;
-  mapData?: MapData | null;
+  maps?: MapData[];
   colorOverride?: string;
   companyNameOverride?: string;
 }
 
-export default function ProposalPreview({ templateKey, data, templateConfig, photos, inspectionDate, mapData, colorOverride, companyNameOverride }: ProposalPreviewProps) {
+export default function ProposalPreview({ templateKey, data, templateConfig, photos, inspectionDate, maps, colorOverride, companyNameOverride }: ProposalPreviewProps) {
   const content = generateContent(templateKey, data);
   const isQuote = templateKey === "inspection_report" && hasInspectionPricing(data);
+  const isInspection = content.title.includes("Inspection");
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const fmtDate = inspectionDate
     ? new Date(inspectionDate + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
@@ -228,13 +230,190 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
   const cc = colorOverride || templateConfig.color;
   const brandName = companyNameOverride || "PEST CONTROL";
 
+  // ── Section splitting (mirrors export-html.ts) ──
+  const INFO_TABLE_SECTIONS = new Set(["PROPERTY TYPE", "CONTACT INFORMATION", "PESTS OBSERVED"]);
+  const LATE_SECTION_KEYWORDS = [
+    "TARGET PEST", "SCOPE", "SERVICE FREQUENCY", "INITIAL MONTH",
+    "MONTHLY SERVICE", "PRICING", "INVESTMENT", "STABILIZATION",
+    "ONGOING MONTHLY", "MONITORING", "SERVICE AREAS", "EXTERIOR SERVICES",
+    "INTERIOR SERVICES", "ADDITIONAL AREA", "EQUIPMENT SUMMARY",
+    "PRICING & SCHEDULE", "ADDITIONAL NOTES", "COVERED PESTS",
+    "TECHNICIAN", "CUSTOMER RECOMMENDATIONS", "TECH START",
+  ];
+
+  const earlySections: typeof content.sections = [];
+  const lateSections: typeof content.sections = [];
+
+  content.sections.forEach((s) => {
+    const upper = s.heading.toUpperCase();
+    // For inspection reports, skip sections already in the info table
+    if (isInspection && INFO_TABLE_SECTIONS.has(upper)) return;
+    const isLate = LATE_SECTION_KEYWORDS.some((kw) => upper.includes(kw));
+    if (isLate) lateSections.push(s);
+    else earlySections.push(s);
+  });
+
+  /** Render a section with special formatting for inspection report sections */
+  const renderSection = (s: { heading: string; items: string[] }, i: number) => {
+    const upper = s.heading.toUpperCase();
+    const headingStyle: React.CSSProperties = { fontFamily: "'Arial','Helvetica',sans-serif", fontSize: 14, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "1.5px", color: cc, borderBottom: `1px solid ${cc}33`, paddingBottom: 6, marginBottom: 12 };
+
+    // ── Areas Inspected: checkmarks ──
+    if (isInspection && upper === "AREAS INSPECTED") {
+      return (
+        <div key={i} style={{ marginBottom: 26 }}>
+          <h2 style={headingStyle}>{s.heading}</h2>
+          {s.items.map((item, j) => {
+            const clean = item.endsWith(".") ? item.slice(0, -1) : item;
+            return (
+              <div key={j} style={{ marginBottom: 6, fontSize: 14, color: "#333", paddingLeft: 16, fontFamily: "'Arial',sans-serif" }}>
+                {"\u2713\u00A0\u00A0"}{clean}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // ── Scope of Work: phase-based ──
+    if (upper.includes("SCOPE")) {
+      return (
+        <div key={i} style={{ marginBottom: 26 }}>
+          <h2 style={headingStyle}>{s.heading}</h2>
+          {s.items.map((item, j) => {
+            if (item.startsWith("__PHASE__")) {
+              return <div key={j} style={{ fontSize: 14, fontWeight: 700, color: "#333", margin: "14px 0 6px", fontFamily: "'Arial',sans-serif" }}>{item.replace("__PHASE__", "")}</div>;
+            }
+            if (item.startsWith("__SUB__")) {
+              return (
+                <div key={j} style={{ marginBottom: 5, fontSize: 14, color: "#333", paddingLeft: 24, position: "relative", fontFamily: "'Arial',sans-serif" }}>
+                  <span style={{ position: "absolute", left: 8, color: cc, fontWeight: 700 }}>{"\u2022"}</span>{item.replace("__SUB__", "")}
+                </div>
+              );
+            }
+            return (
+              <div key={j} style={{ marginBottom: 6, fontSize: 14, color: "#333", paddingLeft: 16, fontFamily: "'Arial',sans-serif" }}>
+                {item}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // ── Covered Pests: comma-separated list ──
+    if (upper === "COVERED PESTS") {
+      return (
+        <div key={i} style={{ marginBottom: 26 }}>
+          <h2 style={headingStyle}>{s.heading}</h2>
+          <div style={{ fontSize: 14, color: "#333", paddingLeft: 16, fontFamily: "'Arial',sans-serif" }}>
+            {s.items.join(", ")}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Pricing: table + includes rendering ──
+    if (upper === "PRICING") {
+      // Group items: __ROW__ starts a block, __INC__ adds includes, anything else is a note
+      type PricingBlock = { service: string; cost: string; includes: string[] };
+      const blocks: PricingBlock[] = [];
+      const notes: string[] = [];
+      let cur: PricingBlock | null = null;
+      s.items.forEach((item) => {
+        if (item.startsWith("__ROW__")) {
+          if (cur) blocks.push(cur);
+          const parts = item.replace("__ROW__", "").split("|");
+          cur = { service: parts[0] || "", cost: parts[1] || "", includes: [] };
+          if (parts[2]?.trim()) cur.includes.push(parts[2].trim()); // backward compat
+        } else if (item.startsWith("__INC__") && cur) {
+          cur.includes.push(item.replace("__INC__", ""));
+        } else {
+          if (cur) { blocks.push(cur); cur = null; }
+          notes.push(item);
+        }
+      });
+      if (cur) blocks.push(cur);
+
+      return (
+        <div key={i} style={{ marginBottom: 26 }}>
+          <h2 style={headingStyle}>{s.heading}</h2>
+          {blocks.length > 0 && (
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Arial',sans-serif", fontSize: 13, margin: "8px 0 12px" }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid #ddd" }}>
+                    <th style={{ textAlign: "left", padding: "6px 10px", fontWeight: 700, color: "#666", textTransform: "uppercase", fontSize: 10 }}>Service</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", fontWeight: 700, color: "#666", textTransform: "uppercase", fontSize: 10 }}>Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {blocks.map((b, bi) => (
+                    <React.Fragment key={bi}>
+                      <tr style={{ borderBottom: b.includes.length ? "none" : "1px solid #eee" }}>
+                        <td style={{ padding: "6px 10px", fontWeight: 600 }}>{b.service}</td>
+                        <td style={{ padding: "6px 10px", fontWeight: 700, textAlign: "right" }}>{b.cost}</td>
+                      </tr>
+                      {b.includes.length > 0 && (
+                        <tr style={{ borderBottom: "1px solid #eee" }}>
+                          <td colSpan={2} style={{ padding: "2px 10px 8px 24px" }}>
+                            {b.includes.map((inc, ii) => (
+                              <div key={ii} style={{ fontSize: 12, color: "#555", margin: "0 0 2px" }}>{"\u2022"} {inc}</div>
+                            ))}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {notes.map((item, j) => (
+            <div key={j} style={{ marginBottom: 8, fontSize: 14, color: "#333", paddingLeft: 16, position: "relative", fontFamily: "'Arial',sans-serif" }}>
+              <span style={{ position: "absolute", left: 0, color: cc, fontWeight: 700 }}>{"\u2022"}</span>{item}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ── Default section rendering ──
+    return (
+      <div key={i} style={{ marginBottom: 26 }}>
+        <h2 style={headingStyle}>{s.heading}</h2>
+        {s.items.map((item, j) => (
+          <div key={j} style={{ marginBottom: 8, fontSize: 14, color: "#333", paddingLeft: 16, position: "relative", fontFamily: "'Arial',sans-serif" }}>
+            <span style={{ position: "absolute", left: 0, color: cc, fontWeight: 700 }}>{"\u2022"}</span>{item}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // ── Build info table rows for inspection reports ──
+  const infoRows: [string, string][] = [];
+  if (isInspection) {
+    const vt = data.vertical_type === "Other" ? (data.vertical_custom || "Commercial") : (data.vertical_type || "");
+    const pestsObs = data.target_pests ? data.target_pests.split(",").map(p => p.trim()).filter(Boolean).join(", ") : "";
+    if (fmtDate) infoRows.push(["Inspection Date", fmtDate]);
+    infoRows.push(["Prepared", today]);
+    if (vt) infoRows.push(["Property Type", vt]);
+    if (data.contact_name) infoRows.push(["Contact", data.contact_name]);
+    if (data.contact_phone) infoRows.push(["Phone", data.contact_phone]);
+    if (data.contact_email) infoRows.push(["Email", data.contact_email]);
+    if (pestsObs) infoRows.push(["Pests Observed", pestsObs]);
+    if (data.sanitation_level) infoRows.push(["Sanitation Level", data.sanitation_level]);
+    if (data.exposure_level) infoRows.push(["Pest Exposure", data.exposure_level]);
+  }
+
   return (
     <div id="proposal-preview" style={{ background: "#fff", color: "#1a1a2e", fontFamily: "'Georgia','Times New Roman',serif", padding: "clamp(16px, 4vw, 48px) clamp(12px, 3vw, 40px)", lineHeight: 1.65 }}>
       {/* Header */}
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `3px solid ${cc}`, paddingBottom: 16, marginBottom: 28, gap: 8 }}>
         <div>
           <div style={{ fontFamily: "'Arial Black','Helvetica',sans-serif", fontSize: "clamp(18px, 5vw, 28px)", fontWeight: 900, color: cc, letterSpacing: "-0.5px", lineHeight: 1.2 }}>{brandName}</div>
-          <div style={{ fontFamily: "'Arial',sans-serif", fontSize: 10, letterSpacing: "2px", color: "#666", marginTop: 2, textTransform: "uppercase" }}>{content.title.includes("Inspection") ? (isQuote ? "Inspection Report & Quote" : "Inspection Report") : "Service Proposal"}</div>
+          <div style={{ fontFamily: "'Arial',sans-serif", fontSize: 10, letterSpacing: "2px", color: "#666", marginTop: 2, textTransform: "uppercase" }}>{isInspection ? (isQuote ? "Inspection Report & Quote" : "Inspection Report") : "Service Proposal"}</div>
         </div>
         <div style={{ textAlign: "right", fontFamily: "'Arial',sans-serif", fontSize: 12, color: "#666" }}>
           <div>Prepared: {today}</div>
@@ -244,19 +423,32 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
       {/* Title */}
       <h1 style={{ fontFamily: "'Arial','Helvetica',sans-serif", fontSize: 22, fontWeight: 700, margin: "0 0 8px", lineHeight: 1.3 }}>{content.title}</h1>
       <div style={{ fontSize: 17, fontWeight: 600, color: cc, marginBottom: 4 }}>{content.subtitle}</div>
-      <div style={{ fontSize: 13, color: "#555", marginBottom: 32, fontFamily: "'Arial',sans-serif" }}>{content.address}</div>
+      <div style={{ fontSize: 13, color: "#555", marginBottom: isInspection ? 16 : 32, fontFamily: "'Arial',sans-serif" }}>{content.address}</div>
 
-      {/* Sections */}
-      {content.sections.map((s, i) => (
-        <div key={i} style={{ marginBottom: 26 }}>
-          <h2 style={{ fontFamily: "'Arial','Helvetica',sans-serif", fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: cc, borderBottom: `1px solid ${cc}33`, paddingBottom: 6, marginBottom: 12 }}>{s.heading}</h2>
-          {s.items.map((item, j) => (
-            <div key={j} style={{ marginBottom: 8, fontSize: 14, color: "#333", paddingLeft: 16, position: "relative", fontFamily: "'Arial',sans-serif" }}>
-              <span style={{ position: "absolute", left: 0, color: cc, fontWeight: 700 }}>{"\u2022"}</span>{item}
-            </div>
-          ))}
+      {/* Info table for inspection reports */}
+      {isInspection && infoRows.length > 0 && (
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 24, fontFamily: "'Arial',sans-serif", fontSize: 13 }}>
+          <tbody>
+            {infoRows.map(([label, value], ri) => (
+              <tr key={ri} style={{ borderBottom: "1px solid #e0e0e0" }}>
+                <td style={{ padding: "6px 10px", fontWeight: 700, color: "#333", width: 160, verticalAlign: "top" }}>{label}</td>
+                <td style={{ padding: "6px 10px", color: "#555" }}>{value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Early sections */}
+      {earlySections.map((s, i) => renderSection(s, i))}
+
+      {/* Late sections (Service Proposal heading) */}
+      {lateSections.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <h2 style={{ textAlign: "center", fontFamily: "'Arial Black','Helvetica',sans-serif", fontSize: 16, fontWeight: 900, color: cc, textTransform: "uppercase", letterSpacing: "2px", borderTop: `2px solid ${cc}`, borderBottom: `2px solid ${cc}`, padding: "8px 0", marginBottom: 16 }}>Service Proposal</h2>
+          {lateSections.map((s, i) => renderSection(s, earlySections.length + i))}
         </div>
-      ))}
+      )}
 
       {/* Inspection Photos */}
       {photos && photos.length > 0 && (
@@ -292,9 +484,6 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
                       {p.caption && (
                         <div style={{ color: "#333" }}>{p.caption}</div>
                       )}
-                      {!p.caption && !p.concernType && !p.locationFound && (
-                        <div style={{ color: "#999" }}>No caption provided</div>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -304,95 +493,112 @@ export default function ProposalPreview({ templateKey, data, templateConfig, pho
         </div>
       )}
 
-      {/* Site Map */}
-      {mapData && (mapData.markers.length > 0 || (mapData.drawings && mapData.drawings.length > 0)) && (
+      {/* Site Maps */}
+      {maps && maps.some((md) => md.markers.length > 0 || (md.drawings && md.drawings.length > 0)) && (
         <div style={{ marginTop: 36, pageBreakBefore: "always" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
             <div style={{ flex: 1, height: 2, background: cc }} />
-            <div style={{ fontFamily: "'Arial Black','Helvetica',sans-serif", fontSize: 16, fontWeight: 900, color: cc, textTransform: "uppercase", letterSpacing: "2px", whiteSpace: "nowrap" }}>Site Map</div>
+            <div style={{ fontFamily: "'Arial Black','Helvetica',sans-serif", fontSize: 16, fontWeight: 900, color: cc, textTransform: "uppercase", letterSpacing: "2px", whiteSpace: "nowrap" }}>
+              {maps.filter((md) => md.markers.length > 0 || (md.drawings && md.drawings.length > 0)).length > 1 ? "Site Maps" : "Site Map"}
+            </div>
             <div style={{ flex: 1, height: 2, background: cc }} />
           </div>
           <div style={{ fontFamily: "'Arial',sans-serif", fontSize: 13, color: "#555", marginBottom: 16, textAlign: "center", fontStyle: "italic" }}>
             Equipment placement and areas of concern identified during inspection.
           </div>
 
-          {/* Map image/canvas with drawings + markers */}
-          <div style={{ position: "relative", marginBottom: 16, borderRadius: 8, overflow: "hidden", border: "1px solid #e0e0e0" }}>
-            {mapData.imageSrc ? (
-              <img src={mapData.imageSrc} alt="Site map" style={{ width: "100%", display: "block" }} />
-            ) : (
-              <div style={{
-                width: "100%",
-                aspectRatio: `${mapData.canvasWidth || 800} / ${mapData.canvasHeight || 600}`,
-                background: "#ffffff",
-              }} />
-            )}
-
-            {/* Drawing SVG overlay */}
-            {mapData.drawings && mapData.drawings.length > 0 && (
-              <svg
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-                style={{
-                  position: "absolute", top: 0, left: 0,
-                  width: "100%", height: "100%",
-                  pointerEvents: "none",
-                }}
-              >
-                {mapData.drawings.map((s, i) => renderStrokeSVG(s, i))}
-              </svg>
-            )}
-
-            {/* Markers — shaped by category */}
-            {mapData.markers.map((m, i) => {
-              const mc = markerContent(m, i);
-              const mClr = markerColor(m);
-              const shape = markerShape(m);
-              const sz = 26;
-              return (
-                <div key={m.id} style={{
-                  position: "absolute",
-                  left: `${m.x}%`, top: `${m.y}%`,
-                  transform: "translate(-50%, -50%)",
-                }}>
-                  <ShapedMarker color={mClr} content={mc} shape={shape} size={sz} />
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Legend — grouped with counts */}
-          {mapData.markers.length > 0 && (() => {
-            const legendGroups = groupMarkers(mapData.markers);
+          {maps.map((mapData, mapIdx) => {
+            const hasContent = mapData.markers.length > 0 || (mapData.drawings && mapData.drawings.length > 0);
+            if (!hasContent) return null;
             return (
-              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Arial',sans-serif", fontSize: 12, minWidth: 400 }}>
-                <thead>
-                  <tr style={{ borderBottom: "2px solid #ddd" }}>
-                    <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 700, fontSize: 11, color: "#666", textTransform: "uppercase" }}>Icon</th>
-                    <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 700, fontSize: 11, color: "#666", textTransform: "uppercase" }}>Type</th>
-                    <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 700, fontSize: 11, color: "#666", textTransform: "uppercase" }}>Label</th>
-                    <th style={{ textAlign: "center", padding: "6px 8px", fontWeight: 700, fontSize: 11, color: "#666", textTransform: "uppercase" }}>Qty</th>
-                    <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 700, fontSize: 11, color: "#666", textTransform: "uppercase" }}>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {legendGroups.map((g) => (
-                    <tr key={g.key} style={{ borderBottom: "1px solid #eee" }}>
-                      <td style={{ padding: "6px 8px" }}>
-                        <ShapedMarker color={g.color} content={g.abbreviation} shape={g.shape} size={22} />
-                      </td>
-                      <td style={{ padding: "6px 8px", color: g.color, fontWeight: 600, textTransform: "capitalize" }}>{g.category}</td>
-                      <td style={{ padding: "6px 8px", fontWeight: 600 }}>{g.label}</td>
-                      <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 13 }}>{g.count}</td>
-                      <td style={{ padding: "6px 8px", color: "#666" }}>{g.descriptions.join("; ") || "\u2014"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div key={mapData.id ?? mapIdx} style={{ marginBottom: mapIdx < maps.length - 1 ? 32 : 0, pageBreakInside: "avoid" }}>
+                {/* Diagram title */}
+                {mapData.title && (
+                  <h3 style={{ fontFamily: "'Arial','Helvetica',sans-serif", fontSize: 14, fontWeight: 700, color: "#333", margin: "16px 0 10px", textAlign: "center" }}>
+                    {mapData.title}
+                  </h3>
+                )}
+
+                {/* Map image/canvas with drawings + markers */}
+                <div style={{ position: "relative", marginBottom: 16, borderRadius: 8, overflow: "hidden", border: "1px solid #e0e0e0" }}>
+                  {mapData.imageSrc ? (
+                    <img src={mapData.imageSrc} alt={mapData.title || "Site map"} style={{ width: "100%", display: "block" }} />
+                  ) : (
+                    <div style={{
+                      width: "100%",
+                      aspectRatio: `${mapData.canvasWidth || 800} / ${mapData.canvasHeight || 600}`,
+                      background: "#ffffff",
+                    }} />
+                  )}
+
+                  {/* Drawing SVG overlay */}
+                  {mapData.drawings && mapData.drawings.length > 0 && (
+                    <svg
+                      viewBox="0 0 100 100"
+                      preserveAspectRatio="none"
+                      style={{
+                        position: "absolute", top: 0, left: 0,
+                        width: "100%", height: "100%",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      {mapData.drawings.map((s, i) => renderStrokeSVG(s, i))}
+                    </svg>
+                  )}
+
+                  {/* Markers — shaped by category */}
+                  {mapData.markers.map((m, i) => {
+                    const mc = markerContent(m, i);
+                    const mClr = markerColor(m);
+                    const shape = markerShape(m);
+                    const sz = 26;
+                    return (
+                      <div key={m.id} style={{
+                        position: "absolute",
+                        left: `${m.x}%`, top: `${m.y}%`,
+                        transform: "translate(-50%, -50%)",
+                      }}>
+                        <ShapedMarker color={mClr} content={mc} shape={shape} size={sz} />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Legend — grouped with counts */}
+                {mapData.markers.length > 0 && (() => {
+                  const legendGroups = groupMarkers(mapData.markers);
+                  return (
+                    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Arial',sans-serif", fontSize: 12, minWidth: 400 }}>
+                      <thead>
+                        <tr style={{ borderBottom: "2px solid #ddd" }}>
+                          <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 700, fontSize: 11, color: "#666", textTransform: "uppercase" }}>Icon</th>
+                          <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 700, fontSize: 11, color: "#666", textTransform: "uppercase" }}>Type</th>
+                          <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 700, fontSize: 11, color: "#666", textTransform: "uppercase" }}>Label</th>
+                          <th style={{ textAlign: "center", padding: "6px 8px", fontWeight: 700, fontSize: 11, color: "#666", textTransform: "uppercase" }}>Qty</th>
+                          <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 700, fontSize: 11, color: "#666", textTransform: "uppercase" }}>Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {legendGroups.map((g) => (
+                          <tr key={g.key} style={{ borderBottom: "1px solid #eee" }}>
+                            <td style={{ padding: "6px 8px" }}>
+                              <ShapedMarker color={g.color} content={g.abbreviation} shape={g.shape} size={22} />
+                            </td>
+                            <td style={{ padding: "6px 8px", color: g.color, fontWeight: 600, textTransform: "capitalize" }}>{g.category}</td>
+                            <td style={{ padding: "6px 8px", fontWeight: 600 }}>{g.label}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 13 }}>{g.count}</td>
+                            <td style={{ padding: "6px 8px", color: "#666" }}>{g.descriptions.join("; ") || "\u2014"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    </div>
+                  );
+                })()}
               </div>
             );
-          })()}
+          })}
         </div>
       )}
 

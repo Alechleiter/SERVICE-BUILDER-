@@ -1,4 +1,4 @@
-import type { ProposalContent, PhotoEntry, MapData, MapMarker, DrawingStroke } from "./types";
+import type { ProposalContent, PhotoEntry, MapData, MapMarker, DrawingStroke, ChartEntry } from "./types";
 import { groupByZone } from "./zone-presets";
 
 const EQUIPMENT_COLOR = "#2A9D8F";
@@ -187,11 +187,12 @@ export type ExportVariant = "customer" | "internal";
  * @param forWord — when true, produces Word-compatible HTML:
  *   - Tables instead of flexbox
  *   - No clip-path / SVG / absolute positioning
- *   - Pre-rasterized map image via mapImageSrc
+ *   - Pre-rasterized map images via mapImages
  *   - Explicit image dimensions
  *
- * @param mapImageSrc — pre-rasterized base64 PNG of the map (for Word export).
- *   When provided, this single image replaces the SVG + absolute-positioned markers.
+ * @param maps — array of site map diagrams (each with markers, drawings, image)
+ * @param mapImages — pre-rasterized base64 PNGs keyed by map id (for Word export).
+ *   When provided, these images replace the SVG + absolute-positioned markers.
  */
 export function buildProposalExportHTML(
   content: ProposalContent,
@@ -199,10 +200,12 @@ export function buildProposalExportHTML(
   photos: PhotoEntry[],
   inspectionDate: string,
   forWord = false,
-  mapData?: MapData | null,
+  maps?: MapData[] | null,
   variant: ExportVariant = "customer",
-  mapImageSrc?: string | null,
+  mapImages?: Map<number, string> | null,
   companyName?: string,
+  charts?: ChartEntry[],
+  formData?: Record<string, string>,
 ): string {
   const brandName = companyName || "PEST CONTROL";
   const groups = groupByZone(photos || []);
@@ -260,8 +263,42 @@ export function buildProposalExportHTML(
   if (!forWord) html += `<div class="keep-with-next" style="page-break-after:avoid;">`;
   html += `<h1 style="font-size:22px;font-weight:700;margin:0 0 6px;">${content.title}</h1>`;
   html += `<div style="font-size:17px;font-weight:600;color:${color};margin-bottom:4px;">${content.subtitle}</div>`;
-  html += `<div style="font-size:13px;color:#555;margin-bottom:28px;">${content.address}</div>`;
+  html += `<div style="font-size:13px;color:#555;margin-bottom:${isInspection ? "16" : "28"}px;">${content.address}</div>`;
   if (!forWord) html += `</div>`;
+
+  // ── Inspection Report: metadata info table ──
+  // Sections whose content is absorbed into the info table and should NOT render as normal sections
+  const INFO_TABLE_SECTIONS = new Set(["PROPERTY TYPE", "CONTACT INFORMATION", "PESTS OBSERVED"]);
+
+  if (isInspection && formData) {
+    const vt = formData.vertical_type === "Other"
+      ? (formData.vertical_custom || "Commercial")
+      : (formData.vertical_type || "");
+    const pestsObs = formData.target_pests
+      ? formData.target_pests.split(",").map(p => p.trim()).filter(Boolean).join(", ")
+      : "";
+    const infoRows: [string, string][] = [];
+    if (fmtDate) infoRows.push(["Inspection Date", fmtDate]);
+    infoRows.push(["Prepared", today]);
+    if (vt) infoRows.push(["Property Type", vt]);
+    if (formData.contact_name) infoRows.push(["Contact", formData.contact_name]);
+    if (formData.contact_phone) infoRows.push(["Phone", formData.contact_phone]);
+    if (formData.contact_email) infoRows.push(["Email", formData.contact_email]);
+    if (pestsObs) infoRows.push(["Pests Observed", pestsObs]);
+    if (formData.sanitation_level) infoRows.push(["Sanitation Level", formData.sanitation_level]);
+    if (formData.exposure_level) infoRows.push(["Pest Exposure", formData.exposure_level]);
+
+    if (infoRows.length > 0) {
+      html += `<table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:13px;" cellpadding="0" cellspacing="0">`;
+      infoRows.forEach(([label, value]) => {
+        html += `<tr style="border-bottom:1px solid #e0e0e0;">`;
+        html += `<td style="padding:6px 10px;font-weight:700;color:#333;width:160px;vertical-align:top;">${label}</td>`;
+        html += `<td style="padding:6px 10px;color:#555;">${value}</td>`;
+        html += `</tr>`;
+      });
+      html += `</table>`;
+    }
+  }
 
   // ── Split sections: early vs late ──
   const LATE_SECTION_KEYWORDS = [
@@ -269,7 +306,7 @@ export function buildProposalExportHTML(
     "MONTHLY SERVICE", "PRICING", "INVESTMENT", "STABILIZATION",
     "ONGOING MONTHLY", "MONITORING", "SERVICE AREAS", "EXTERIOR SERVICES",
     "INTERIOR SERVICES", "ADDITIONAL AREA", "EQUIPMENT SUMMARY",
-    "PRICING & SCHEDULE", "ADDITIONAL NOTES",
+    "PRICING & SCHEDULE", "ADDITIONAL NOTES", "COVERED PESTS",
     "TECHNICIAN", "CUSTOMER RECOMMENDATIONS", "TECH START",
   ];
 
@@ -279,13 +316,114 @@ export function buildProposalExportHTML(
   content.sections.forEach((s) => {
     if (!isInternal && INTERNAL_ONLY_SECTIONS.has(s.heading.toUpperCase())) return;
     const upper = s.heading.toUpperCase();
+    // For inspection reports, skip sections already in the info table
+    if (isInspection && formData && INFO_TABLE_SECTIONS.has(upper)) return;
     const isLate = LATE_SECTION_KEYWORDS.some((kw) => upper.includes(kw));
     if (isLate) lateSections.push(s);
     else earlySections.push(s);
   });
 
-  // Section renderer
+  // Section renderer — handles special formatting for inspection report sections
   const renderSection = (s: { heading: string; items: string[] }) => {
+    const upper = s.heading.toUpperCase();
+
+    // ── Areas Inspected: use checkmarks ──
+    if (isInspection && upper === "AREAS INSPECTED") {
+      if (!forWord) html += `<div class="pb-avoid" style="page-break-inside:avoid;">`;
+      html += `<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${color};border-bottom:1px solid ${color}44;padding-bottom:5px;margin:20px 0 10px;">${s.heading}</h2>`;
+      s.items.forEach((item) => {
+        const clean = item.endsWith(".") ? item.slice(0, -1) : item;
+        html += `<p style="font-size:13px;color:#333;margin:0 0 6px;padding-left:14px;">\u2713\u00A0\u00A0${clean}</p>`;
+      });
+      if (!forWord) html += `</div>`;
+      return;
+    }
+
+    // ── Scope of Work: phase-based rendering ──
+    if (upper.includes("SCOPE")) {
+      if (!forWord) html += `<div class="pb-avoid" style="page-break-inside:avoid;">`;
+      html += `<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${color};border-bottom:1px solid ${color}44;padding-bottom:5px;margin:20px 0 10px;">${s.heading}</h2>`;
+      s.items.forEach((item) => {
+        if (item.startsWith("__PHASE__")) {
+          const phaseText = item.replace("__PHASE__", "");
+          html += `<p style="font-size:13px;font-weight:700;color:#333;margin:14px 0 6px;">${phaseText}</p>`;
+        } else if (item.startsWith("__SUB__")) {
+          const subText = item.replace("__SUB__", "");
+          html += `<p style="font-size:13px;color:#333;margin:0 0 5px;padding-left:20px;">\u2022 ${subText}</p>`;
+        } else {
+          html += `<p style="font-size:13px;color:#333;margin:0 0 6px;padding-left:14px;">${item}</p>`;
+        }
+      });
+      if (!forWord) html += `</div>`;
+      return;
+    }
+
+    // ── Covered Pests: clean comma list ──
+    if (upper === "COVERED PESTS") {
+      if (!forWord) html += `<div class="pb-avoid" style="page-break-inside:avoid;">`;
+      html += `<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${color};border-bottom:1px solid ${color}44;padding-bottom:5px;margin:20px 0 10px;">${s.heading}</h2>`;
+      html += `<p style="font-size:13px;color:#333;margin:0 0 6px;padding-left:14px;">${s.items.join(", ")}</p>`;
+      if (!forWord) html += `</div>`;
+      return;
+    }
+
+    // ── Pricing: table + includes rendering ──
+    if (upper === "PRICING") {
+      // Group items into pricing blocks: each __ROW__ followed by zero or more __INC__
+      type PricingBlock = { service: string; cost: string; includes: string[] };
+      const blocks: PricingBlock[] = [];
+      const notes: string[] = [];
+      let cur: PricingBlock | null = null;
+      s.items.forEach((item) => {
+        if (item.startsWith("__ROW__")) {
+          if (cur) blocks.push(cur);
+          const parts = item.replace("__ROW__", "").split("|");
+          cur = { service: parts[0] || "", cost: parts[1] || "", includes: [] };
+          // backward compat: old 3-column pipe format
+          if (parts[2]?.trim()) cur.includes.push(parts[2].trim());
+        } else if (item.startsWith("__INC__") && cur) {
+          cur.includes.push(item.replace("__INC__", ""));
+        } else {
+          if (cur) { blocks.push(cur); cur = null; }
+          notes.push(item);
+        }
+      });
+      if (cur) blocks.push(cur);
+
+      if (!forWord) html += `<div class="pb-avoid" style="page-break-inside:avoid;">`;
+      html += `<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${color};border-bottom:1px solid ${color}44;padding-bottom:5px;margin:20px 0 10px;">${s.heading}</h2>`;
+
+      if (blocks.length > 0) {
+        html += `<table style="width:100%;border-collapse:collapse;margin:8px 0 12px;font-size:13px;" cellpadding="0" cellspacing="0">`;
+        html += `<tr style="border-bottom:2px solid #ddd;">`;
+        html += `<th style="text-align:left;padding:6px 10px;font-weight:700;color:#666;text-transform:uppercase;font-size:10px;">Service</th>`;
+        html += `<th style="text-align:right;padding:6px 10px;font-weight:700;color:#666;text-transform:uppercase;font-size:10px;">Cost</th>`;
+        html += `</tr>`;
+        blocks.forEach((b) => {
+          html += `<tr style="border-bottom:${b.includes.length ? "none" : "1px solid #eee"};">`;
+          html += `<td style="padding:6px 10px;font-weight:600;">${b.service}</td>`;
+          html += `<td style="padding:6px 10px;font-weight:700;text-align:right;">${b.cost}</td>`;
+          html += `</tr>`;
+          if (b.includes.length > 0) {
+            html += `<tr style="border-bottom:1px solid #eee;">`;
+            html += `<td colspan="2" style="padding:2px 10px 8px 24px;">`;
+            b.includes.forEach((inc) => {
+              html += `<p style="font-size:12px;color:#555;margin:0 0 2px;">\u2022 ${inc}</p>`;
+            });
+            html += `</td></tr>`;
+          }
+        });
+        html += `</table>`;
+      }
+      // Fallback: old-style bullet items or pricing notes
+      notes.forEach((item) => {
+        html += `<p style="font-size:13px;color:#333;margin:0 0 6px;padding-left:14px;">\u2022 ${item}</p>`;
+      });
+      if (!forWord) html += `</div>`;
+      return;
+    }
+
+    // ── Default section rendering ──
     if (!forWord) html += `<div class="pb-avoid" style="page-break-inside:avoid;">`;
     html += `<h2 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${color};border-bottom:1px solid ${color}44;padding-bottom:5px;margin:20px 0 10px;">${s.heading}</h2>`;
     s.items.forEach((item) => {
@@ -332,7 +470,6 @@ export function buildProposalExportHTML(
             if (p.concernType) html += `<div style="color:${color};font-weight:700;font-size:10px;margin-bottom:2px;">Concern: ${p.concernType}</div>`;
             if (p.locationFound) html += `<div style="color:#555;font-size:10px;margin-bottom:2px;">Location: ${p.locationFound}</div>`;
             if (p.caption) html += `<div style="color:#333;">${p.caption}</div>`;
-            if (!p.caption && !p.concernType && !p.locationFound) html += `<div style="color:#999;">No caption provided</div>`;
             html += `</td></tr></table>`;
             html += `</td>`;
           }
@@ -356,7 +493,6 @@ export function buildProposalExportHTML(
             if (p.concernType) html += `<div style="color:${color};font-weight:700;font-size:10px;margin-bottom:2px;">Concern: ${p.concernType}</div>`;
             if (p.locationFound) html += `<div style="color:#555;font-size:10px;margin-bottom:2px;">Location: ${p.locationFound}</div>`;
             if (p.caption) html += `<div style="color:#333;">${p.caption}</div>`;
-            if (!p.caption && !p.concernType && !p.locationFound) html += `<div style="color:#999;">No caption provided</div>`;
             html += `</div></div>`;
           });
           html += `</div>`;
@@ -366,61 +502,156 @@ export function buildProposalExportHTML(
     if (!forWord) html += `</div>`;
   }
 
-  // ── Site Map ──
-  const hasMarkers = mapData && mapData.markers.length > 0;
-  const hasDrawings = mapData && mapData.drawings && mapData.drawings.length > 0;
-  if (mapData && (hasMarkers || hasDrawings)) {
+  // ── Site Maps ──
+  const activeMaps = (maps ?? []).filter((md) => md.markers.length > 0 || (md.drawings && md.drawings.length > 0));
+  if (activeMaps.length > 0) {
     if (forWord) {
       html += `<br clear="all" style="page-break-before:always;">`;
     } else {
       html += `<div class="pb-before" style="margin-top:32px;page-break-before:always;">`;
     }
-    html += `<h2 style="text-align:center;font-size:16px;font-weight:900;color:${color};text-transform:uppercase;letter-spacing:2px;border-top:2px solid ${color};border-bottom:2px solid ${color};padding:8px 0;margin-bottom:8px;">Site Map</h2>`;
+    html += `<h2 style="text-align:center;font-size:16px;font-weight:900;color:${color};text-transform:uppercase;letter-spacing:2px;border-top:2px solid ${color};border-bottom:2px solid ${color};padding:8px 0;margin-bottom:8px;">${activeMaps.length > 1 ? "Site Maps" : "Site Map"}</h2>`;
     html += `<p style="text-align:center;font-size:12px;color:#555;font-style:italic;margin-bottom:16px;">Equipment placement and areas of concern identified during inspection.</p>`;
 
-    if (forWord && mapImageSrc) {
-      // Word: use a single pre-rasterized image (no SVG, no absolute positioning)
-      html += `<div style="margin-bottom:16px;border:1px solid #e0e0e0;text-align:center;">`;
-      html += `<img src="${mapImageSrc}" width="650" style="width:100%;height:auto;display:block;" />`;
-      html += `</div>`;
-    } else if (!forWord) {
-      // PDF/clipboard: SVG overlay + absolute-positioned markers
-      html += `<div class="pb-avoid" style="position:relative;margin-bottom:16px;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;page-break-inside:avoid;">`;
-      if (mapData.imageSrc) {
-        html += `<img src="${mapData.imageSrc}" style="width:100%;display:block;" />`;
-      } else {
-        const cw = mapData.canvasWidth || 800;
-        const ch = mapData.canvasHeight || 600;
-        html += `<div style="width:100%;aspect-ratio:${cw}/${ch};background:#ffffff;"></div>`;
+    activeMaps.forEach((mapData, mapIdx) => {
+      // Page break between diagrams (not before the first one)
+      if (mapIdx > 0) {
+        if (forWord) {
+          html += `<br clear="all" style="page-break-before:always;">`;
+        } else {
+          html += `<div style="page-break-before:always;margin-top:24px;"></div>`;
+        }
       }
-      if (mapData.drawings && mapData.drawings.length > 0) {
-        html += buildDrawingsSVG(mapData.drawings);
-      }
-      mapData.markers.forEach((m, i) => {
-        const mc = markerContent(m, i);
-        const mClr = markerColor(m);
-        const shape = markerShape(m);
-        html += `<div style="position:absolute;left:${m.x}%;top:${m.y}%;transform:translate(-50%,-50%);">${shapedMarkerHTML(mClr, mc, shape, 26)}</div>`;
-      });
-      html += `</div>`;
-    }
 
-    // Legend table
-    if (hasMarkers) {
-      const legendGroups = groupMarkersForExport(mapData.markers);
-      if (!forWord) html += `<div class="pb-avoid" style="page-break-inside:avoid;">`;
-      html += `<table style="width:100%;border-collapse:collapse;font-size:11px;" cellpadding="0" cellspacing="0">`;
-      html += `<tr style="border-bottom:2px solid #ddd;"><th style="text-align:left;padding:5px 8px;color:#666;text-transform:uppercase;">Icon</th><th style="text-align:left;padding:5px 8px;color:#666;text-transform:uppercase;">Type</th><th style="text-align:left;padding:5px 8px;color:#666;text-transform:uppercase;">Label</th><th style="text-align:center;padding:5px 8px;color:#666;text-transform:uppercase;">Qty</th><th style="text-align:left;padding:5px 8px;color:#666;text-transform:uppercase;">Notes</th></tr>`;
-      legendGroups.forEach((g) => {
-        const iconCell = forWord
-          ? wordSafeMarkerHTML(g.color, g.abbreviation, 22)
-          : shapedMarkerHTML(g.color, g.abbreviation, g.shape, 22);
-        const notes = g.descriptions.join("; ") || "\u2014";
-        html += `<tr style="border-bottom:1px solid #eee;"><td style="padding:5px 8px;">${iconCell}</td><td style="padding:5px 8px;color:${g.color};font-weight:600;text-transform:capitalize;">${g.category}</td><td style="padding:5px 8px;font-weight:600;">${g.label}</td><td style="padding:5px 8px;text-align:center;font-weight:700;font-size:13px;">${g.count}</td><td style="padding:5px 8px;color:#666;">${notes}</td></tr>`;
-      });
-      html += `</table>`;
-      if (!forWord) html += `</div>`;
+      // Diagram title
+      if (mapData.title) {
+        html += `<h3 style="font-size:14px;font-weight:700;color:#333;margin:12px 0 10px;text-align:center;">${mapData.title}</h3>`;
+      }
+
+      const mapImageSrc = mapImages?.get(mapData.id ?? 0) ?? null;
+
+      if (forWord && mapImageSrc) {
+        // Word: use a single pre-rasterized image (no SVG, no absolute positioning)
+        html += `<div style="margin-bottom:16px;border:1px solid #e0e0e0;text-align:center;">`;
+        html += `<img src="${mapImageSrc}" width="650" style="width:100%;height:auto;display:block;" />`;
+        html += `</div>`;
+      } else if (!forWord) {
+        // PDF/clipboard: SVG overlay + absolute-positioned markers
+        html += `<div class="pb-avoid" style="position:relative;margin-bottom:16px;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;page-break-inside:avoid;">`;
+        if (mapData.imageSrc) {
+          html += `<img src="${mapData.imageSrc}" style="width:100%;display:block;" />`;
+        } else {
+          const cw = mapData.canvasWidth || 800;
+          const ch = mapData.canvasHeight || 600;
+          html += `<div style="width:100%;aspect-ratio:${cw}/${ch};background:#ffffff;"></div>`;
+        }
+        if (mapData.drawings && mapData.drawings.length > 0) {
+          html += buildDrawingsSVG(mapData.drawings);
+        }
+        mapData.markers.forEach((m, i) => {
+          const mc = markerContent(m, i);
+          const mClr = markerColor(m);
+          const shape = markerShape(m);
+          html += `<div style="position:absolute;left:${m.x}%;top:${m.y}%;transform:translate(-50%,-50%);">${shapedMarkerHTML(mClr, mc, shape, 26)}</div>`;
+        });
+        html += `</div>`;
+      }
+
+      // Legend table
+      if (mapData.markers.length > 0) {
+        const legendGroups = groupMarkersForExport(mapData.markers);
+        if (!forWord) html += `<div class="pb-avoid" style="page-break-inside:avoid;">`;
+        html += `<table style="width:100%;border-collapse:collapse;font-size:11px;" cellpadding="0" cellspacing="0">`;
+        html += `<tr style="border-bottom:2px solid #ddd;"><th style="text-align:left;padding:5px 8px;color:#666;text-transform:uppercase;">Icon</th><th style="text-align:left;padding:5px 8px;color:#666;text-transform:uppercase;">Type</th><th style="text-align:left;padding:5px 8px;color:#666;text-transform:uppercase;">Label</th><th style="text-align:center;padding:5px 8px;color:#666;text-transform:uppercase;">Qty</th><th style="text-align:left;padding:5px 8px;color:#666;text-transform:uppercase;">Notes</th></tr>`;
+        legendGroups.forEach((g) => {
+          const iconCell = forWord
+            ? wordSafeMarkerHTML(g.color, g.abbreviation, 22)
+            : shapedMarkerHTML(g.color, g.abbreviation, g.shape, 22);
+          const notes = g.descriptions.join("; ") || "\u2014";
+          html += `<tr style="border-bottom:1px solid #eee;"><td style="padding:5px 8px;">${iconCell}</td><td style="padding:5px 8px;color:${g.color};font-weight:600;text-transform:capitalize;">${g.category}</td><td style="padding:5px 8px;font-weight:600;">${g.label}</td><td style="padding:5px 8px;text-align:center;font-weight:700;font-size:13px;">${g.count}</td><td style="padding:5px 8px;color:#666;">${notes}</td></tr>`;
+        });
+        html += `</table>`;
+        if (!forWord) html += `</div>`;
+      }
+    });
+    if (!forWord) html += `</div>`;
+  }
+
+  // ── Data Charts ──
+  if (charts && charts.length > 0) {
+    if (forWord) {
+      html += `<br clear="all" style="page-break-before:always;">`;
+    } else {
+      html += `<div class="pb-before" style="margin-top:32px;page-break-before:always;">`;
     }
+    html += `<h2 style="text-align:center;font-size:16px;font-weight:900;color:${color};text-transform:uppercase;letter-spacing:2px;border-top:2px solid ${color};border-bottom:2px solid ${color};padding:8px 0;margin-bottom:8px;">Data Charts</h2>`;
+    html += `<p style="text-align:center;font-size:12px;color:#555;font-style:italic;margin-bottom:20px;">Visual data summaries for zones and areas inspected.</p>`;
+
+    charts.forEach((chart) => {
+      if (chart.data.length === 0) return;
+      if (!forWord) html += `<div class="pb-avoid" style="page-break-inside:avoid;margin-bottom:28px;">`;
+      else html += `<div style="margin-bottom:28px;">`;
+
+      // Chart title
+      if (chart.title) {
+        html += `<h3 style="font-size:14px;font-weight:700;color:#1a1a2e;margin:0 0 8px;text-align:center;">${chart.title}</h3>`;
+      }
+
+      const maxValue = Math.max(...chart.data.map((d) => d.value), 1);
+
+      if (chart.type === "bar") {
+        // Horizontal bar chart using pure HTML/CSS (works in PDF and Word)
+        html += `<table style="width:100%;border-collapse:collapse;margin:8px 0;" cellpadding="0" cellspacing="0">`;
+        chart.data.forEach((row) => {
+          const pct = Math.round((row.value / maxValue) * 100);
+          html += `<tr>`;
+          html += `<td style="width:120px;padding:4px 10px 4px 0;font-size:12px;font-weight:600;color:#333;text-align:right;white-space:nowrap;">${row.label}</td>`;
+          html += `<td style="padding:4px 0;">`;
+          html += `<div style="background:#f0f0f0;border-radius:4px;overflow:hidden;height:22px;position:relative;">`;
+          html += `<div style="background:${row.color};width:${pct}%;height:100%;border-radius:4px;min-width:2px;"></div>`;
+          html += `</div>`;
+          html += `</td>`;
+          html += `<td style="width:50px;padding:4px 0 4px 10px;font-size:13px;font-weight:700;color:#333;text-align:left;">${row.value}</td>`;
+          html += `</tr>`;
+        });
+        html += `</table>`;
+      } else {
+        // Pie / Doughnut — render as a color-coded data table
+        // (Pure HTML pie charts are impractical; use a clean legend-style table)
+        const total = chart.data.reduce((s, d) => s + d.value, 0) || 1;
+        html += `<table style="width:100%;max-width:400px;margin:8px auto;border-collapse:collapse;" cellpadding="0" cellspacing="0">`;
+        html += `<tr style="border-bottom:2px solid #ddd;">`;
+        html += `<th style="text-align:left;padding:4px 8px;font-size:10px;color:#666;text-transform:uppercase;">Zone</th>`;
+        html += `<th style="text-align:right;padding:4px 8px;font-size:10px;color:#666;text-transform:uppercase;">Count</th>`;
+        html += `<th style="text-align:right;padding:4px 8px;font-size:10px;color:#666;text-transform:uppercase;">%</th>`;
+        html += `<th style="width:120px;padding:4px 8px;font-size:10px;color:#666;text-transform:uppercase;">Share</th>`;
+        html += `</tr>`;
+        chart.data.forEach((row) => {
+          const pct = Math.round((row.value / total) * 100);
+          html += `<tr style="border-bottom:1px solid #eee;">`;
+          html += `<td style="padding:5px 8px;font-size:12px;font-weight:600;">`;
+          html += `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${row.color};margin-right:6px;vertical-align:middle;"></span>${row.label}</td>`;
+          html += `<td style="padding:5px 8px;font-size:13px;font-weight:700;text-align:right;">${row.value}</td>`;
+          html += `<td style="padding:5px 8px;font-size:12px;color:#666;text-align:right;">${pct}%</td>`;
+          html += `<td style="padding:5px 8px;">`;
+          html += `<div style="background:#f0f0f0;border-radius:3px;overflow:hidden;height:12px;">`;
+          html += `<div style="background:${row.color};width:${pct}%;height:100%;border-radius:3px;min-width:1px;"></div>`;
+          html += `</div>`;
+          html += `</td>`;
+          html += `</tr>`;
+        });
+        html += `<tr><td colspan="4" style="padding:5px 8px;font-size:11px;color:#888;text-align:right;">Total: ${total}</td></tr>`;
+        html += `</table>`;
+      }
+
+      // Caption
+      if (chart.caption) {
+        html += `<p style="text-align:center;font-size:11px;color:#666;font-style:italic;margin:6px 0 0;">${chart.caption}</p>`;
+      }
+
+      html += `</div>`;
+    });
+
     if (!forWord) html += `</div>`;
   }
 
@@ -431,7 +662,7 @@ export function buildProposalExportHTML(
     } else {
       html += `<div class="pb-before" style="margin-top:32px;page-break-before:always;">`;
     }
-    html += `<h2 style="text-align:center;font-size:16px;font-weight:900;color:${color};text-transform:uppercase;letter-spacing:2px;border-top:2px solid ${color};border-bottom:2px solid ${color};padding:8px 0;margin-bottom:16px;">${isInspection ? (isQuote ? "Service Proposal" : "Additional Details") : "Service Proposal"}</h2>`;
+    html += `<h2 style="text-align:center;font-size:16px;font-weight:900;color:${color};text-transform:uppercase;letter-spacing:2px;border-top:2px solid ${color};border-bottom:2px solid ${color};padding:8px 0;margin-bottom:16px;">Service Proposal</h2>`;
     lateSections.forEach(renderSection);
     if (!forWord) html += `</div>`;
   }

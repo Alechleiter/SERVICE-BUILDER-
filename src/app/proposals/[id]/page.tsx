@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProposals } from "@/hooks/useProposals";
 import { useClients } from "@/hooks/useClients";
 import type { Client } from "@/lib/supabase/database.types";
-import type { TemplateId, PhotoEntry, MapData } from "@/lib/proposals/types";
+import type { TemplateId, PhotoEntry, MapData, ChartEntry } from "@/lib/proposals/types";
 import { TEMPLATES } from "@/lib/proposals/templates";
 import { generateContent } from "@/lib/proposals/content-generator";
 import { buildProposalExportHTML } from "@/lib/proposals/export-html";
@@ -13,7 +13,8 @@ import { rasterizeMap } from "@/lib/proposals/map-rasterize";
 import { buildSectionList, groupFieldsBySection } from "@/lib/proposals/section-utils";
 import ProposalPreview from "@/components/proposals/ProposalPreview";
 import PhotoUploader from "@/components/proposals/PhotoUploader";
-import MapAnnotator from "@/components/proposals/MapAnnotator";
+import MultiMapEditor from "@/components/proposals/MultiMapEditor";
+import ChartBuilder from "@/components/proposals/ChartBuilder";
 import ProposalFormField from "@/components/proposals/ProposalFormField";
 import SectionList from "@/components/proposals/SectionList";
 import SectionPanel from "@/components/proposals/SectionPanel";
@@ -50,7 +51,8 @@ export default function SavedProposalPage() {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [photos, setPhotos] = useState<PhotoEntry[]>([]);
   const [inspectionDate, setInspectionDate] = useState("");
-  const [mapData, setMapData] = useState<MapData | null>(null);
+  const [maps, setMaps] = useState<MapData[]>([]);
+  const [charts, setCharts] = useState<ChartEntry[]>([]);
   const [activeTab, setActiveTab] = useState<"form" | "preview">("form");
   const [isDark, setIsDark] = useState(true);
   const [proposalName, setProposalName] = useState("");
@@ -82,10 +84,11 @@ export default function SavedProposalPage() {
       selectedClientId: selectedClientId || undefined,
       proposalName: proposalName || undefined,
       photos,
-      mapData,
+      mapData: maps,
+      charts: charts.length > 0 ? charts : undefined,
       savedAt: Date.now(),
     };
-  }, [selectedTemplate, formData, inspectionDate, selectedClientId, proposalName, photos, mapData]);
+  }, [selectedTemplate, formData, inspectionDate, selectedClientId, proposalName, photos, maps, charts]);
 
   const { clear: clearDraft, restore: restoreDraft } = useAutoSave(`proposal-${proposalId}`, autoSaveData);
 
@@ -117,7 +120,16 @@ export default function SavedProposalPage() {
     if (restoredDraft.selectedClientId) setSelectedClientId(restoredDraft.selectedClientId);
     if (restoredDraft.proposalName) setProposalName(restoredDraft.proposalName);
     if (restoredDraft.photos?.length) setPhotos(restoredDraft.photos);
-    if (restoredDraft.mapData) setMapData(restoredDraft.mapData);
+    // Backward compat: old drafts may have MapData | null instead of MapData[]
+    if (restoredDraft.mapData) {
+      const md = restoredDraft.mapData;
+      if (Array.isArray(md)) {
+        setMaps(md);
+      } else if (md && typeof md === "object" && "fileName" in (md as MapData)) {
+        setMaps([md as MapData]);
+      }
+    }
+    if (restoredDraft.charts?.length) setCharts(restoredDraft.charts);
     setShowRestore(false);
     setRestoredDraft(null);
   }, [restoredDraft]);
@@ -145,14 +157,15 @@ export default function SavedProposalPage() {
       setLoadingProposal(true);
       const result = await load(proposalId);
       if (result) {
-        const { proposal, photos: dbPhotos, mapData: dbMapData } = result;
+        const { proposal, photos: dbPhotos, mapData: dbMapData, charts: dbCharts } = result;
         setSelectedTemplate(proposal.template_id as TemplateId);
         setFormData((proposal.form_data ?? {}) as Record<string, string>);
         setProposalName(proposal.name ?? "");
         if (proposal.inspection_date) setInspectionDate(proposal.inspection_date);
         if (proposal.client_id) setSelectedClientId(proposal.client_id);
         if (dbPhotos.length > 0) setPhotos(dbPhotos);
-        if (dbMapData) setMapData(dbMapData);
+        if (dbMapData && dbMapData.length > 0) setMaps(dbMapData);
+        if (dbCharts.length > 0) setCharts(dbCharts);
       }
       setLoadingProposal(false);
     })();
@@ -195,8 +208,9 @@ export default function SavedProposalPage() {
         formData,
         inspectionDate: inspectionDate || undefined,
         clientId: selectedClientId || undefined,
-        mapData: mapData || undefined,
+        mapData: maps.length > 0 ? maps : undefined,
         photos: photos.length > 0 ? photos : undefined,
+        charts: charts.length > 0 ? charts : undefined,
       });
       console.log("[SavedPage:Save] Save result:", result);
       if (result) {
@@ -210,7 +224,7 @@ export default function SavedProposalPage() {
       alert("Save failed unexpectedly. Your data is safe in auto-save.\n\nError: " + (err instanceof Error ? err.message : String(err)));
     }
     setSaving(false);
-  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, mapData, photos, save, clearDraft, user]);
+  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, maps, photos, charts, save, clearDraft, user]);
 
   const handleFinalize = useCallback(async () => {
     if (!selectedTemplate) {
@@ -232,8 +246,9 @@ export default function SavedProposalPage() {
         formData,
         inspectionDate: inspectionDate || undefined,
         clientId: selectedClientId || undefined,
-        mapData: mapData || undefined,
+        mapData: maps.length > 0 ? maps : undefined,
         photos: photos.length > 0 ? photos : undefined,
+        charts: charts.length > 0 ? charts : undefined,
       });
       console.log("[SavedPage:Finalize] Save result:", saveResult);
       if (!saveResult) {
@@ -243,10 +258,10 @@ export default function SavedProposalPage() {
       }
       // Generate both versions
       const content = generateContent(selectedTemplate, formData);
-      const customerHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, false, mapData, "customer", null, companyName);
-      const internalHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, false, mapData, "internal", null, companyName);
-      const customerWordHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, true, mapData, "customer", mapImageRef.current, companyName);
-      const internalWordHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, true, mapData, "internal", mapImageRef.current, companyName);
+      const customerHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, false, maps, "customer", null, companyName, charts, formData);
+      const internalHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, false, maps, "internal", null, companyName, charts, formData);
+      const customerWordHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, true, maps, "customer", mapImagesRef.current, companyName, charts, formData);
+      const internalWordHtml = buildProposalExportHTML(content, accentColor, photos, inspectionDate, true, maps, "internal", mapImagesRef.current, companyName, charts, formData);
       // Save snapshots
       const version = await finalize({ proposalId, customerHtml, internalHtml, formData });
       console.log("[SavedPage:Finalize] Finalize returned version:", version);
@@ -267,7 +282,7 @@ export default function SavedProposalPage() {
       alert("Finalize failed unexpectedly. Your data is safe in auto-save.\n\nError: " + (err instanceof Error ? err.message : String(err)));
     }
     setFinalizing(false);
-  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, photos, mapData, save, finalize, clearDraft, user]);
+  }, [proposalId, selectedTemplate, proposalName, formData, inspectionDate, selectedClientId, photos, maps, charts, save, finalize, clearDraft, user]);
 
   const handleFieldChange = useCallback((key: string, value: string) => {
     setFormData((p) => ({ ...p, [key]: value }));
@@ -293,15 +308,15 @@ export default function SavedProposalPage() {
     if (!selectedTemplate) return "";
     const fw = opts?.forWord ?? false;
     const content = generateContent(selectedTemplate, formData);
-    return buildProposalExportHTML(content, accentColor, photos, inspectionDate, fw, mapData, "customer", fw ? mapImageRef.current : null, companyName);
-  }, [selectedTemplate, formData, photos, inspectionDate, mapData, accentColor, companyName]);
+    return buildProposalExportHTML(content, accentColor, photos, inspectionDate, fw, maps, "customer", fw ? mapImagesRef.current : null, companyName, charts, formData);
+  }, [selectedTemplate, formData, photos, inspectionDate, maps, accentColor, companyName, charts]);
 
   const getInternalHtml = useCallback((opts?: { forWord?: boolean }) => {
     if (!selectedTemplate) return "";
     const fw = opts?.forWord ?? false;
     const content = generateContent(selectedTemplate, formData);
-    return buildProposalExportHTML(content, accentColor, photos, inspectionDate, fw, mapData, "internal", fw ? mapImageRef.current : null, companyName);
-  }, [selectedTemplate, formData, photos, inspectionDate, mapData, accentColor, companyName]);
+    return buildProposalExportHTML(content, accentColor, photos, inspectionDate, fw, maps, "internal", fw ? mapImagesRef.current : null, companyName, charts, formData);
+  }, [selectedTemplate, formData, photos, inspectionDate, maps, accentColor, companyName, charts]);
 
   const getPlainText = useCallback(() => {
     if (!selectedTemplate) return "";
@@ -318,15 +333,21 @@ export default function SavedProposalPage() {
   const showMapAnnotator = !!selectedTemplate;
   const tmpl = selectedTemplate ? TEMPLATES[selectedTemplate] : null;
 
-  // Cache rasterized map image for Word export
-  const mapImageRef = useRef<string | null>(null);
+  // Cache rasterized map images for Word export (keyed by map id)
+  const mapImagesRef = useRef<Map<number, string>>(new Map());
   useEffect(() => {
-    if (!mapData || (mapData.markers.length === 0 && (!mapData.drawings || mapData.drawings.length === 0))) {
-      mapImageRef.current = null;
-      return;
-    }
-    rasterizeMap(mapData).then((src) => { mapImageRef.current = src; }).catch(() => { mapImageRef.current = null; });
-  }, [mapData]);
+    const newImages = new Map<number, string>();
+    const tasks = maps
+      .filter((md) => md.markers.length > 0 || (md.drawings && md.drawings.length > 0))
+      .map(async (md) => {
+        const id = md.id ?? 0;
+        try {
+          const src = await rasterizeMap(md);
+          if (src) newImages.set(id, src);
+        } catch { /* ignore */ }
+      });
+    Promise.all(tasks).then(() => { mapImagesRef.current = newImages; });
+  }, [maps]);
 
   // Build ordered section list
   const fieldGroups = useMemo(
@@ -339,11 +360,13 @@ export default function SavedProposalPage() {
       tmpl
         ? buildSectionList(tmpl.fields, formData, {
             photoCount: photos.length,
-            markerCount: mapData?.markers.length ?? 0,
+            mapCount: maps.length,
+            totalMarkerCount: maps.reduce((sum, md) => sum + md.markers.length, 0),
             showMap: showMapAnnotator,
+            chartCount: charts.length,
           })
         : [],
-    [tmpl, formData, photos.length, mapData?.markers.length, showMapAnnotator],
+    [tmpl, formData, photos.length, maps, showMapAnnotator, charts.length],
   );
 
   // Section navigation
@@ -400,10 +423,20 @@ export default function SavedProposalPage() {
 
     if (section.isSpecial === "map") {
       return (
-        <MapAnnotator
-          mapData={mapData}
-          onMapDataChange={setMapData}
-          accentColor={tmpl.color}
+        <MultiMapEditor
+          maps={maps}
+          onMapsChange={setMaps}
+          accentColor={accentColor}
+        />
+      );
+    }
+
+    if (section.isSpecial === "charts") {
+      return (
+        <ChartBuilder
+          charts={charts}
+          onChartsChange={setCharts}
+          accentColor={accentColor}
         />
       );
     }
@@ -671,7 +704,7 @@ export default function SavedProposalPage() {
               <div style={{ fontSize: 11, color: "var(--text4)", marginTop: 1 }}>
                 Auto-saved {new Date(restoredDraft.savedAt).toLocaleString()}
                 {restoredDraft.photos?.length ? ` · ${restoredDraft.photos.length} photo${restoredDraft.photos.length > 1 ? "s" : ""}` : ""}
-                {restoredDraft.mapData ? " · map" : ""}
+                {Array.isArray(restoredDraft.mapData) && restoredDraft.mapData.length > 0 ? ` · ${restoredDraft.mapData.length} map${restoredDraft.mapData.length > 1 ? "s" : ""}` : ""}
               </div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
@@ -714,17 +747,19 @@ export default function SavedProposalPage() {
       )}
 
       {/* Content */}
-      <div style={{ display: "flex", maxWidth: isMobile ? "100%" : 1400, margin: "0 auto", minHeight: "calc(100vh - 106px)", overflowX: "hidden" }}>
+      <div style={{ display: "flex", maxWidth: isMobile ? "100%" : 1400, margin: "0 auto", minHeight: isMobile ? undefined : "calc(100vh - 106px)", height: isMobile ? "calc(100vh - 106px)" : undefined, overflowX: "hidden" }}>
         {/* Left: Section List + Slide Panel */}
         <div
           style={{
             width: activeTab === "form" ? (isMobile ? "100%" : 220) : 0,
-            overflow: activeTab === "form" ? "visible" : "hidden",
+            overflow: activeTab === "form" ? (isMobile ? "auto" : "visible") : "hidden",
+            overflowX: isMobile ? "hidden" : undefined,
+            WebkitOverflowScrolling: isMobile ? "touch" : undefined,
             transition: isMobile ? "none" : "width 0.3s",
             borderRight: activeTab === "form" && !isMobile ? "1px solid var(--border)" : "none",
             flexShrink: isMobile ? 1 : 0,
             position: "relative",
-          }}
+          } as React.CSSProperties}
         >
           {/* Section list */}
           {activeTab === "form" && (
@@ -780,7 +815,7 @@ export default function SavedProposalPage() {
           background: "var(--bg2)",
         }}>
           <div style={{ maxWidth: 750, margin: "0 auto", borderRadius: 12, overflow: "hidden", boxShadow: "0 4px 32px rgba(0,0,0,0.15)" }}>
-            <ProposalPreview templateKey={selectedTemplate} data={formData} templateConfig={tmpl!} photos={photos} inspectionDate={inspectionDate} mapData={mapData} colorOverride={accentColor} companyNameOverride={companyName} />
+            <ProposalPreview templateKey={selectedTemplate} data={formData} templateConfig={tmpl!} photos={photos} inspectionDate={inspectionDate} maps={maps} colorOverride={accentColor} companyNameOverride={companyName} />
           </div>
         </div>
       </div>

@@ -124,6 +124,9 @@ export const TREATMENT_PRESETS: CadPreset[] = [
   { abbreviation: "HT", label: "Heat Service", color: "#E63946", category: "treatment" },
   { abbreviation: "PB", label: "Proactive Bed Bug Service", color: "#E63946", category: "treatment" },
   { abbreviation: "K9", label: "K9 Service", color: "#E63946", category: "treatment" },
+  { abbreviation: "TC", label: "Tin Cat", color: "#E63946", category: "treatment" },
+  { abbreviation: "TT", label: "Trapper Tunnel", color: "#E63946", category: "treatment" },
+  { abbreviation: "BS", label: "Bait Station", color: "#2A9D8F", category: "treatment" },
   { abbreviation: "WT", label: "Wild Life Trap", color: "#F59E0B", category: "treatment" },
 ];
 

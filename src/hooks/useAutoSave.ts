@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useCallback } from "react";
-import type { PhotoEntry, MapData } from "@/lib/proposals/types";
+import type { PhotoEntry, MapData, ChartEntry } from "@/lib/proposals/types";
 
 /**
  * Auto-save hook using IndexedDB for full proposal data (photos, map, form).
@@ -16,7 +16,8 @@ export interface AutoSaveData {
   selectedClientId?: string;
   proposalName?: string;
   photos: PhotoEntry[];
-  mapData: MapData | null;
+  mapData: MapData[];
+  charts?: ChartEntry[];
   savedAt: number;
 }
 

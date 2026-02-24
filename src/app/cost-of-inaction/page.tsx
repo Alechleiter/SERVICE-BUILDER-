@@ -73,7 +73,7 @@ export default function CostOfInactionPage() {
       formData: { __restore: JSON.stringify({ selectedIndustry, entries, customEntries, timeframeMonths, propertyName, notes, selectedClientId }) },
       inspectionDate: "",
       photos: [],
-      mapData: null,
+      mapData: [],
       savedAt: Date.now(),
     };
   }, [selectedIndustry, entries, customEntries, timeframeMonths, propertyName, notes, selectedClientId]);

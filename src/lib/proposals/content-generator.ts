@@ -21,6 +21,7 @@ export function hasInspectionPricing(data: FormData): boolean {
   return !!(
     data.ir_initial_cost?.trim() ||
     data.ir_recurring_cost?.trim() ||
+    data.ir_monthly_total?.trim() ||
     data.ir_onetime_cost?.trim() ||
     data.ir_pricing_notes?.trim()
   );
@@ -31,7 +32,9 @@ function hasInspectionScope(data: FormData): boolean {
   return !!(
     data.ir_scope_description?.trim() ||
     data.ir_service_frequency?.trim() ||
-    data.ir_service_areas?.trim()
+    data.ir_service_areas?.trim() ||
+    safeJsonArray(data.ir_phase1_items).length > 0 ||
+    safeJsonArray(data.ir_phase2_items).length > 0
   );
 }
 
@@ -368,27 +371,61 @@ export function generateContent(templateKey: TemplateId, data: FormData): Propos
       // ── Optional Scope of Work (turns report into quick quote) ──
       if (hasInspectionScope(data)) {
         const scopeItems: string[] = [];
-        if (data.ir_scope_description) scopeItems.push(data.ir_scope_description.trim());
-        if (data.ir_service_frequency) scopeItems.push(`Service frequency: ${data.ir_service_frequency.trim()}.`);
-        if (data.ir_service_areas) scopeItems.push(`Service areas: ${data.ir_service_areas.trim()}.`);
+        // Summary line
+        const scopeParts: string[] = [];
+        if (data.ir_service_frequency) scopeParts.push(`Service frequency: ${data.ir_service_frequency.trim()}`);
+        if (data.ir_service_areas) scopeParts.push(`Service areas: ${data.ir_service_areas.trim()}`);
+        if (scopeParts.length) scopeItems.push(scopeParts.join("  |  "));
+
+        // Backward compat: old free-form scope description
+        if (data.ir_scope_description?.trim()) scopeItems.push(data.ir_scope_description.trim());
+
+        // Phase 1
+        const phase1Items = safeJsonArray(data.ir_phase1_items);
+        if (phase1Items.length > 0) {
+          const p1Title = data.ir_phase1_title?.trim() || "Initial Service";
+          const p1Dur = data.ir_phase1_duration?.trim();
+          scopeItems.push(`__PHASE__${p1Title}${p1Dur ? `  (${p1Dur})` : ""}`);
+          phase1Items.forEach(item => scopeItems.push(`__SUB__${item}`));
+        }
+
+        // Phase 2
+        const phase2Items = safeJsonArray(data.ir_phase2_items);
+        if (phase2Items.length > 0) {
+          const p2Title = data.ir_phase2_title?.trim() || "Ongoing Service";
+          const p2Dur = data.ir_phase2_duration?.trim();
+          scopeItems.push(`__PHASE__${p2Title}${p2Dur ? `  (${p2Dur})` : ""}`);
+          phase2Items.forEach(item => scopeItems.push(`__SUB__${item}`));
+        }
+
         sections.push({ heading: "Scope of Work", items: scopeItems });
+      }
+
+      // ── Covered Pests ──
+      const coveredPests = data.covered_pests
+        ? data.covered_pests.split(",").map(p => p.trim()).filter(Boolean)
+        : [];
+      if (coveredPests.length > 0) {
+        sections.push({ heading: "Covered Pests", items: coveredPests });
       }
 
       // ── Optional Pricing ──
       if (hasInspectionPricing(data)) {
         const pricingItems: string[] = [];
-        if (data.ir_initial_cost) {
-          const v = Number(data.ir_initial_cost);
-          pricingItems.push(`Initial service cost: ${isNaN(v) ? data.ir_initial_cost.trim() : formatCurrency(v)}.`);
-        }
-        if (data.ir_recurring_cost) {
-          const v = Number(data.ir_recurring_cost);
-          pricingItems.push(`Monthly / recurring cost: ${isNaN(v) ? data.ir_recurring_cost.trim() : formatCurrency(v)}.`);
-        }
-        if (data.ir_onetime_cost) {
-          const v = Number(data.ir_onetime_cost);
-          pricingItems.push(`One-time service cost: ${isNaN(v) ? data.ir_onetime_cost.trim() : formatCurrency(v)}.`);
-        }
+        const pushRow = (label: string, costKey: string, includesKey: string) => {
+          if (!data[costKey]) return;
+          const v = Number(data[costKey]);
+          const cost = isNaN(v) ? data[costKey].trim() : formatCurrency(v);
+          // includes can be JSON array (bullet-list) or plain string (backward compat)
+          let incArr = safeJsonArray(data[includesKey]);
+          if (incArr.length === 0 && data[includesKey]?.trim()) incArr = [data[includesKey].trim()];
+          pricingItems.push(`__ROW__${label}|${cost}`);
+          incArr.forEach(inc => pricingItems.push(`__INC__${inc}`));
+        };
+        pushRow("Initial Service", "ir_initial_cost", "ir_initial_includes");
+        pushRow("Per Visit", "ir_recurring_cost", "ir_recurring_includes");
+        pushRow("Monthly Total", "ir_monthly_total", "ir_monthly_includes");
+        pushRow("One-Time Service", "ir_onetime_cost", "ir_onetime_includes");
         if (data.ir_pricing_notes) pricingItems.push(data.ir_pricing_notes.trim());
         sections.push({ heading: "Pricing", items: pricingItems });
       }
